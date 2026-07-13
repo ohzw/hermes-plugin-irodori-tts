@@ -1,0 +1,14 @@
+{
+  "name": "irodori-tts",
+  "label": "Irodori TTS",
+  "description": "Launch and manage the standalone local Irodori TTS dashboard.",
+  "icon": "Activity",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/irodori-tts",
+    "position": "after:analytics"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

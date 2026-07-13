@@ -1,0 +1,4 @@
+export function display(value: unknown): string { if (value === null || value === undefined || value === '') return '—'; if (Array.isArray(value)) return value.join(', '); if (typeof value === 'object') return JSON.stringify(value); return String(value); }
+export function redact(value: unknown): string { return JSON.stringify(value, (key, item) => /password|token|secret|api[_-]?key/i.test(key) ? '***' : item, 2); }
+export function formatTimestamp(value: unknown): string { if (!value) return '—'; const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString(); }
+export function formatBytes(value: unknown): string { const bytes = Number(value); if (!Number.isFinite(bytes)) return '—'; if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
