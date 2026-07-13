@@ -370,7 +370,13 @@ def create_app(*, static_dir: Path | None = None, instance_token: str | None = N
 def _serve(host: str, port: int, instance_token: str) -> None:
     import uvicorn
 
-    uvicorn.run(create_app(instance_token=instance_token), host=host, port=port, log_level="info")
+    uvicorn.run(
+        create_app(instance_token=instance_token),
+        host=host,
+        port=port,
+        log_level="info",
+        timeout_graceful_shutdown=1,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -80,6 +80,13 @@ class DashboardAppTests(unittest.TestCase):
 
 
 class DashboardLifecycleTests(unittest.TestCase):
+    def test_server_bounds_graceful_shutdown_for_live_streams(self):
+        uvicorn = mock.Mock()
+        with mock.patch.dict("sys.modules", {"uvicorn": uvicorn}):
+            server._serve("127.0.0.1", 9120, "secret")
+
+        self.assertEqual(1, uvicorn.run.call_args.kwargs["timeout_graceful_shutdown"])
+
     def test_status_removes_stale_state(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"HERMES_HOME": tmp}):
             state_path = server.state_path()
