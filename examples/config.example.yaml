@@ -1,0 +1,21 @@
+tts:
+  provider: irodori-local
+  providers:
+    irodori-local:
+      base_url: http://127.0.0.1:8088/v1
+      model: irodori-tts
+      output_format: mp3
+      server_workdir: ~/src/Irodori-TTS-Server
+      server_command: uv run --no-sync python -m irodori_openai_tts --host 127.0.0.1 --port 8088
+      auto_start_server: true
+      restart_on_error: true
+      request_attempts: 2
+      caption: ""
+      num_steps: 8
+      t_schedule_mode: sway
+      pronunciation_dictionary:
+        enabled: false
+      dashboard:
+        host: 127.0.0.1
+        port: 9120
+        audio_history_enabled: false

@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+dashboard-ui/node_modules/
+dashboard-ui/.vite/
+
+# Local runtime state
+.env
+*.local.yaml
+*.local.json
+/history/
+/logs/
+/dashboard/playground/
+.serena/
+.hermes/
+
+# Voice and model assets
+*.wav
+*.mp3
+*.ogg
+*.opus
+*.flac
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Editors / OS
+.DS_Store
+.hermes-*
+.idea/
+.vscode/
