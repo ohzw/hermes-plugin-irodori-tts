@@ -15,6 +15,13 @@ import { rgb } from "./palette"
 type Star = { key: string; xi: number; depth: number; phase: number }
 type Surface = { top: number[]; floor: number[] }
 
+/** Canvas is painter's-algorithm based: later entries cover earlier ones.
+ * Paint aggregate series first so component series remain visible on top,
+ * while preserving config order for legends and tooltips. */
+export function seriesPaintOrder(keys: string[]): string[] {
+  return [...keys].reverse()
+}
+
 type LoopArgs = {
   canvas: HTMLCanvasElement
   bloomCanvas: HTMLCanvasElement | null
@@ -71,7 +78,7 @@ function startCartesianLoop({
     const s = state.current
     const stacked = s.stackType === "stacked" || s.stackType === "percent"
     const revealCols = Math.ceil(reveal * cols)
-    s.configKeys.forEach((key, si) => {
+    seriesPaintOrder(s.configKeys).forEach((key, si) => {
       const cur = current[key]
       if (!cur) return
       const seed = s.seedOf(key)
@@ -233,7 +240,7 @@ function startCartesianLoop({
         ? Math.round((marker / (s.dataLength - 1)) * (cols - 1))
         : -1
     if (mx >= 0 && mx <= revealCols) {
-      for (const key of s.configKeys) {
+      for (const key of seriesPaintOrder(s.configKeys)) {
         const cur = current[key]
         if (!cur) continue
         const seed = s.seedOf(key)
@@ -322,7 +329,7 @@ export function CartesianCanvas() {
   const stars = (() => {
     const out: Star[] = []
     const per = Math.max(4, Math.round(cols / 14))
-    ctx.configKeys.forEach((key, k) => {
+    seriesPaintOrder(ctx.configKeys).forEach((key, k) => {
       for (let i = 0; i < per; i++) {
         const seed = i * 67 + 13 + k * 131
         out.push({
