@@ -36,6 +36,9 @@ export type CartesianChartProps<TData extends Row> = {
   animate?: boolean
   animationDuration?: number
   replayToken?: number // change to re-play the entrance without remounting
+  /** Re-play the entrance when `data` gets a new identity. Disable this for
+   * live charts so updated targets morph in place instead. */
+  replayOnDataChange?: boolean
   /** Set false for a decorative sparkline: keeps the hover lift but no scrub
    * crosshair / tooltip. */
   interactive?: boolean
@@ -81,6 +84,7 @@ export function CartesianRoot<TData extends Row>({
   animate = true,
   animationDuration = 900,
   replayToken = 0,
+  replayOnDataChange = true,
   interactive = true,
   markerIndex = null,
   hovered = false,
@@ -106,6 +110,7 @@ export function CartesianRoot<TData extends Row>({
     animate,
     animationDuration,
     replayToken,
+    replayOnDataChange,
     markerIndex,
     hovered,
     bloom,

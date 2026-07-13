@@ -3,6 +3,14 @@ import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import App from '../src/App';
 import type {RequestRecord} from '../src/shared/api';
 
+const chartProps = vi.hoisted(() => ({current: null as null | Record<string, unknown>}));
+vi.mock('../src/components/dither-kit/area-chart', () => ({
+  AreaChart: (props: Record<string, unknown>) => {
+    chartProps.current = props;
+    return <div data-testid="area-chart" />;
+  },
+}));
+
 const baseConfig = {revision: 'r1', values: {caption: 'server'}, schema: {fields: {caption: {type: 'string'}}}};
 const baseDictionary = [{id: 'd1', surface: 'old', reading: 'おーるど', enabled: true}];
 let serverConfig = baseConfig;
@@ -16,6 +24,7 @@ beforeEach(() => {
   serverRequests = [{request_id: 'one', status: 'ok', original_text: 'first', audio_id: 'audio', timing_ms: {}}];
   vi.useRealTimers();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(globalThis, 'EventSource');
   vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
     const url = String(input);
     if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: serverRequests}));
@@ -38,6 +47,40 @@ async function renderWithInitialLoad() {
 }
 
 describe('dashboard state preservation', () => {
+  it('applies status events immediately and reports a live connection', async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners = new Map<string, (event: MessageEvent) => void>();
+      onopen: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) { MockEventSource.instances.push(this); }
+      addEventListener(type: string, listener: EventListener) { this.listeners.set(type, listener as (event: MessageEvent) => void); }
+      close() {}
+      emit(type: string, data: unknown) { this.listeners.get(type)?.({data: JSON.stringify(data)} as MessageEvent); }
+    }
+    Object.defineProperty(globalThis, 'EventSource', {configurable: true, value: MockEventSource});
+
+    await renderWithInitialLoad();
+    const source = MockEventSource.instances[0];
+    expect(source.url).toBe('/api/events/status?limit=30');
+
+    act(() => source.onopen?.());
+    expect(screen.getByText(/Live/)).toBeInTheDocument();
+
+    act(() => source.emit('status', {
+      now: 'later',
+      health: {ok: true},
+      recent: [{request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}}, ...serverRequests],
+    }));
+    expect(chartProps.current?.data).toHaveLength(2);
+  });
+
+  it('keeps the overview entrance animation from replaying when live data changes', async () => {
+    await renderWithInitialLoad();
+
+    expect(chartProps.current?.replayOnDataChange).toBe(false);
+  });
+
   it('keeps the opened audio element and currentTime when polling adds a request', async () => {
     window.history.replaceState(null, '', '/history');
     await renderWithInitialLoad();

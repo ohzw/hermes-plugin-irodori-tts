@@ -54,6 +54,24 @@ class DashboardPluginTests(unittest.TestCase):
         self.assertEqual(expected, result)
         status.assert_called_once_with(limit=12)
 
+    def test_status_events_streams_an_initial_sse_snapshot(self):
+        api = load_api_module()
+        expected = {"health": {"ok": True}, "recent": [{"request_id": "req-1"}]}
+
+        async def first_event():
+            request = make_request("/api/events/status")
+            with mock.patch.object(api, "get_public_status", return_value=expected):
+                response = await api.status_events(request, limit=12)
+                chunk = await response.body_iterator.__anext__()
+                await response.body_iterator.aclose()
+                return response, chunk
+
+        response, chunk = asyncio.run(first_event())
+
+        self.assertEqual("text/event-stream; charset=utf-8", response.headers["content-type"])
+        self.assertIn("event: status", chunk)
+        self.assertIn('\"request_id\":\"req-1\"', chunk)
+
     def test_config_route_returns_editable_config_contract(self):
         api = load_api_module()
         store = mock.Mock()

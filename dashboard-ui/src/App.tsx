@@ -45,6 +45,7 @@ export default function App() {
   const [tab, setTab] = useState<Destination>(() => destinationFromPath(window.location.pathname));
   const [error, setError] = useState('');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [connection, setConnection] = useState<'connecting' | 'live' | 'polling'>('connecting');
 
   const refresh = useCallback(async () => {
     try {
@@ -61,7 +62,36 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 5000);
+    let interval: number | null = null;
+    let source: EventSource | null = null;
+    const startPolling = () => {
+      if (interval !== null) return;
+      setConnection('polling');
+      interval = window.setInterval(() => void refresh(), 5000);
+    };
+    const stopPolling = () => {
+      if (interval === null) return;
+      window.clearInterval(interval);
+      interval = null;
+    };
+    startPolling();
+    if (typeof EventSource !== 'undefined') {
+      source = new EventSource('/api/events/status?limit=30');
+      source.onopen = () => {
+        stopPolling();
+        setConnection('live');
+      };
+      source.addEventListener('status', (event) => {
+        try {
+          setStatus(JSON.parse((event as MessageEvent<string>).data) as Status);
+          setLastRefresh(new Date());
+          setError('');
+        } catch {
+          setError('Received an invalid live status update');
+        }
+      });
+      source.onerror = () => startPolling();
+    }
     const onLocationChange = () => {
       const canonical = canonicalPath(window.location.pathname);
       if (window.location.pathname !== canonical) {
@@ -72,7 +102,8 @@ export default function App() {
     onLocationChange();
     window.addEventListener('popstate', onLocationChange);
     return () => {
-      window.clearInterval(interval);
+      stopPolling();
+      source?.close();
       window.removeEventListener('popstate', onLocationChange);
     };
   }, [refresh]);
@@ -106,7 +137,7 @@ export default function App() {
           <div className="shell-title"><span className="eyebrow">LOCAL VOICE GENERATION</span><h1>{destinations.find((item) => item.id === tab)?.label}</h1></div>
           <div className="shell-status" aria-live="polite">
             <Badge className={status.health?.ok ? 'badge-online' : 'badge-offline'}><span className="status-dot" />{status.health?.ok ? 'Service online' : 'Service unavailable'}</Badge>
-            <span className="refresh-label">Refreshes every 5 seconds{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}</span>
+            <span className="refresh-label">{connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Reconnecting · 5s fallback'}{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}</span>
           </div>
         </header>
         <Separator />

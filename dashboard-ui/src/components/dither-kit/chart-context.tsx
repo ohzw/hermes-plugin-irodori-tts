@@ -154,14 +154,15 @@ export function useChartPart(
 
 export { ChartContext }
 
-/** A counter that advances whenever `data` changes identity or `token` advances
- * — drives entrance replays without remounting. Uses the adjust-state-during-
- * render pattern (https://react.dev/reference/react/useState) instead of refs,
- * so React Compiler can reason about it. */
-export function useRevision(data: unknown, token: number) {
+/** Tracks chart entrance replays. A replay token always advances the revision;
+ * data identity does so only when `replayOnDataChange` is enabled. Uses the
+ * adjust-state-during-render pattern (https://react.dev/reference/react/useState)
+ * instead of refs, so React Compiler can reason about it. */
+export function useRevision(data: unknown, token: number, replayOnDataChange = true) {
   const [prev, setPrev] = useState({ data, token, revision: 0 })
   if (prev.data !== data || prev.token !== token) {
-    const next = { data, token, revision: prev.revision + 1 }
+    const shouldReplay = prev.token !== token || replayOnDataChange
+    const next = { data, token, revision: prev.revision + (shouldReplay ? 1 : 0) }
     setPrev(next)
     return next.revision
   }
@@ -183,6 +184,7 @@ export function useChartController({
   animate = true,
   animationDuration = 900,
   replayToken = 0,
+  replayOnDataChange = true,
   markerIndex = null,
   hovered = false,
   bloom = "off",
@@ -199,6 +201,7 @@ export function useChartController({
   animate?: boolean
   animationDuration?: number
   replayToken?: number
+  replayOnDataChange?: boolean
   markerIndex?: number | null
   hovered?: boolean
   bloom?: BloomInput
@@ -209,7 +212,7 @@ export function useChartController({
   // React Compiler memoizes every render-scope value below — no manual
   // useMemo/useCallback wrappers needed.
   const configKeys = Object.keys(config)
-  const revision = useRevision(data, replayToken)
+  const revision = useRevision(data, replayToken, replayOnDataChange)
 
   const [selectedDataKey, setSelectedDataKey] = useState<string | null>(
     defaultSelectedDataKey

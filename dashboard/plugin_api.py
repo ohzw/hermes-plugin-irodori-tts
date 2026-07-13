@@ -1,15 +1,19 @@
 """FastAPI routes for the Hermes Irodori TTS dashboard extension."""
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
 import shutil
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +38,7 @@ from irodori_tts_dictionary import (  # noqa: E402
     validate_dictionary_entry,
 )
 from irodori_tts_history import history_status, list_history, resolve_audio  # noqa: E402
+from irodori_tts_metrics import DEFAULT_LOG  # noqa: E402
 from irodori_tts_settings import (  # noqa: E402
     ConfigConflictError,
     ConfigStore,
@@ -136,6 +141,40 @@ async def standalone_dashboard_stop():
 @router.get("/status")
 async def status(request: Request, limit: int = 30):
     return _rebase_audio_urls(get_public_status(limit=limit), _audio_prefix(request))
+
+
+def _metrics_revision() -> tuple[int, int] | None:
+    try:
+        stat = DEFAULT_LOG.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+@router.get("/events/status")
+async def status_events(request: Request, limit: int = 30):
+    async def events():
+        previous: tuple[int, int] | None | object = object()
+        last_snapshot = 0.0
+        while True:
+            revision = _metrics_revision()
+            now = time.monotonic()
+            if revision != previous or now - last_snapshot >= 15:
+                snapshot = await run_in_threadpool(get_public_status, limit=limit)
+                snapshot = _rebase_audio_urls(snapshot, _audio_prefix(request))
+                payload = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+                yield f"event: status\ndata: {payload}\n\n"
+                previous = revision
+                last_snapshot = now
+            if await request.is_disconnected():
+                break
+            await asyncio.sleep(0.25)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/config")
