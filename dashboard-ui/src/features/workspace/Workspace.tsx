@@ -16,23 +16,13 @@ const advancedGroups: SettingGroup[] = [
   {title: 'Pronunciation and rewrite', keys: ['rewrite.enabled', 'rewrite.model', 'rewrite.fallback', 'pronunciation_dictionary.enabled', 'pronunciation_dictionary.max_prompt_entries']},
 ];
 
-function nestedValue(values: Record<string, unknown>, key: string): unknown {
+function configValue(values: Record<string, unknown>, key: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
   return key.split('.').reduce<unknown>((current, part) => current && typeof current === 'object' ? (current as Record<string, unknown>)[part] : undefined, values);
 }
 
-function withNestedValue(values: Record<string, unknown>, key: string, value: unknown) {
-  const result = {...values};
-  const parts = key.split('.');
-  let target = result;
-  parts.forEach((part, index) => {
-    if (index === parts.length - 1) target[part] = value;
-    else {
-      const child = target[part];
-      target[part] = child && typeof child === 'object' ? {...child as Record<string, unknown>} : {};
-      target = target[part] as Record<string, unknown>;
-    }
-  });
-  return result;
+function withConfigValue(values: Record<string, unknown>, key: string, value: unknown) {
+  return {...values, [key]: value};
 }
 
 function FieldControl({
@@ -142,7 +132,7 @@ function SettingsGroup({
             </span>
             <FieldControl
               meta={meta}
-              value={nestedValue(draft, key)}
+              value={configValue(draft, key)}
               assets={assets}
               onChange={(value) => onChange(key, value)}
             />
@@ -172,7 +162,7 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
 
   if (!saved) return <div className="workspace-loading">Loading configuration</div>;
   const schema = saved.schema?.fields ?? {};
-  const updateValue = (key: string, value: unknown) => { setDraft((current) => withNestedValue(current, key, value)); setWarnings([]); setErrors([]); };
+  const updateValue = (key: string, value: unknown) => { setDraft((current) => withConfigValue(current, key, value)); setWarnings([]); setErrors([]); };
   const resetConfig = () => { setDraft(saved.values ?? {}); setWarnings([]); setErrors([]); setStatus('Reset to saved values'); };
   const validateConfig = async () => {
     setStatus('Validating'); setWarnings([]); setErrors([]);
