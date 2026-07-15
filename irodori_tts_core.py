@@ -66,7 +66,7 @@ def rewrite_preview(
     }
 
 
-def _history_record(request_id: str, provider_name: str, text: str, preview: dict, timing: dict, status: str, error: str | None, output_bytes: int) -> dict:
+def _history_record(request_id: str, provider_name: str, text: str, preview: dict, timing: dict, status: str, error: str | None, output_bytes: int, attempts: int) -> dict:
     rewrite = preview["rewrite"]
     dictionary = preview["dictionary"]
     speech_text = preview["speech_text"]
@@ -85,6 +85,7 @@ def _history_record(request_id: str, provider_name: str, text: str, preview: dic
         "dictionary_entries": dictionary.get("selected_count"),
         "dictionary_applied": dictionary.get("applied"),
         "timing_ms": timing,
+        "attempts": attempts,
         "status": status,
         "error": error,
         "input": text,
@@ -108,11 +109,13 @@ def synthesize_text(text: str, output_path: Path, provider_name: str = "irodori-
     output_path = Path(output_path); output_path.parent.mkdir(parents=True, exist_ok=True)
     timing = {"rewrite": preview["rewrite"]["elapsed_ms"]}; started = time.perf_counter(); last_error = ""
     attempts = max(1, int(cfg.get("request_attempts", 2))); audio = b""
+    attempts_used = 0
     for attempt in range(attempts):
+        attempts_used = attempt + 1
         try:
             t = time.perf_counter(); _start_server(cfg, base_url); timing["server_start_or_health"] = _elapsed_ms(t)
             t = time.perf_counter(); audio = _request_speech(base_url, payload, cfg.get("api_key"), float(cfg.get("request_timeout", 300))); timing["irodori_request"] = _elapsed_ms(t)
-            t = time.perf_counter(); output_path.write_bytes(audio); timing["write_output"] = _elapsed_ms(t); timing["total"] = _elapsed_ms(started)
+            t = time.perf_counter(); output_path.write_bytes(audio); timing["write_output"] = _elapsed_ms(t); timing["total"] = int(timing.get("rewrite") or 0) + _elapsed_ms(started)
             history = {"audio_id": None, "url": None}
             if save_history:
                 from irodori_tts_history import record_audio
@@ -120,7 +123,7 @@ def synthesize_text(text: str, output_path: Path, provider_name: str = "irodori-
                     history = record_audio(output_path, request_id=request_id, audio_format=output_format, input_text=text, speech_text=preview["speech_text"], provider_name=provider_name)
                 except Exception:
                     pass
-                _write_metrics(cfg, _history_record(request_id, provider_name, text, preview, timing, "ok", None, len(audio)))
+                _write_metrics(cfg, _history_record(request_id, provider_name, text, preview, timing, "ok", None, len(audio), attempts_used))
             return {"status": "ok", "request_id": request_id, "audio_id": history.get("audio_id"), "url": history.get("url"), "audio_bytes": len(audio), "output_path": str(output_path), "timing_ms": timing, "rewrite": preview["rewrite"], "dictionary": preview["dictionary"], "error": None}
         except urllib.error.HTTPError as exc:
             last_error = f"Irodori TTS HTTP {exc.code}: {exc.read().decode('utf-8', 'replace')}"
@@ -129,7 +132,7 @@ def synthesize_text(text: str, output_path: Path, provider_name: str = "irodori-
         if attempt + 1 < attempts and _is_restartable_error(last_error):
             continue
         break
-    timing["total"] = _elapsed_ms(started)
+    timing["total"] = int(timing.get("rewrite") or 0) + _elapsed_ms(started)
     if save_history:
-        _write_metrics(cfg, _history_record(request_id, provider_name, text, preview, timing, "error", last_error, 0))
+        _write_metrics(cfg, _history_record(request_id, provider_name, text, preview, timing, "error", last_error, 0, attempts_used))
     return {"status": "error", "request_id": request_id, "audio_bytes": 0, "output_path": str(output_path), "timing_ms": timing, "rewrite": preview["rewrite"], "dictionary": preview["dictionary"], "error": last_error}

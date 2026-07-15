@@ -5,7 +5,26 @@ import {
   type Detail,
   type RequestRecord,
 } from "../../shared/api";
-import { formatTimestamp, display } from "../../shared/format";
+import { formatBytes, formatTimestamp, display } from "../../shared/format";
+
+function formatDuration(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds)) return "—";
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  return `${(milliseconds / 1000).toFixed(2)} s`;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function attemptLabel(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const count = Number(value);
+  if (!Number.isFinite(count)) return "—";
+  return `${count} ${count === 1 ? "attempt" : "attempts"}`;
+}
 function merge(
   previous: Array<RequestRecord & { audio?: AudioRecord }>,
   requests: RequestRecord[],
@@ -126,6 +145,17 @@ export function History({ records }: { records: RequestRecord[] }) {
         {items.map((item) => {
           const detail = details[item.request_id];
           const audio = detail?.audio || item.audio;
+          const timing = detail?.timing_ms || item.timing_ms || {};
+          const rewrite = record(detail?.rewrite);
+          const dictionary = record(detail?.dictionary);
+          const originalText = detail?.original_text || item.original_text || "—";
+          const speechText = detail?.speech_text || (detail ? "—" : "Loading…");
+          const appliedCount = Array.isArray(dictionary.applied)
+            ? dictionary.applied.length
+            : dictionary.selected_count == null ? Number.NaN : Number(dictionary.selected_count);
+          const audioSummary = audio?.format
+            ? `${String(audio.format).toUpperCase()} · ${formatBytes(audio.bytes)}`
+            : "—";
           return (
             <article
               className={`request-card ${open === item.request_id ? "is-open" : ""}`}
@@ -151,15 +181,40 @@ export function History({ records }: { records: RequestRecord[] }) {
                 </button>
               </div>
               {open === item.request_id && (
-                <div className="history-detail-content">
-                  <section>
-                    <div className="eyebrow">TRANSCRIPT</div>
-                    <h3>Speech</h3>
-                    <p className="history-speech-text">
-                      {detail?.speech_text || "Loading…"}
-                    </p>
+                <div className="history-detail-content" data-testid={`history-detail-${item.request_id}`}>
+                  <section className="history-timing-section">
+                    <div className="eyebrow">TIMING</div>
+                    <div className="history-timing-grid">
+                      <div className="history-timing-card"><span>Total</span><strong>{formatDuration(timing.total)}</strong></div>
+                      <div className="history-timing-card"><span>Rewrite</span><strong>{formatDuration(timing.rewrite)}</strong></div>
+                      <div className="history-timing-card"><span>Irodori</span><strong>{formatDuration(timing.irodori_request)}</strong></div>
+                    </div>
+                    <div className="history-timing-breakdown">
+                      <span>Server / health <strong>{formatDuration(timing.server_start_or_health)}</strong></span>
+                      <span>Write output <strong>{formatDuration(timing.write_output)}</strong></span>
+                    </div>
                   </section>
-                  <section>
+
+                  <section className="history-transcript-section">
+                    <div className="eyebrow">TRANSCRIPT COMPARISON</div>
+                    <div className="history-transcript-grid">
+                      <div className="history-transcript-panel">
+                        <h3>Rewrite前</h3>
+                        <p>{originalText}</p>
+                      </div>
+                      <div className="history-transcript-panel">
+                        <h3>Rewrite後</h3>
+                        <p>{speechText}</p>
+                      </div>
+                    </div>
+                  </section>
+
+                  {detail?.error != null && detail.error !== "" && (
+                    <div className="history-error" role="alert">{display(detail.error)}</div>
+                  )}
+
+                  <div className="history-support-grid">
+                    <section>
                     <div className="eyebrow">AUDIO ASSET</div>
                     <h3>Playback</h3>
                     {audio?.audio_id ? (
@@ -179,11 +234,20 @@ export function History({ records }: { records: RequestRecord[] }) {
                         このリクエストの保存済み音声はありません。
                       </p>
                     )}
-                  </section>
-                  <p className="muted">
-                    request_id: {item.request_id} · timing:{" "}
-                    {JSON.stringify(detail?.timing_ms || item.timing_ms || {})}
-                  </p>
+                    </section>
+
+                    <section>
+                      <div className="eyebrow">REQUEST DETAILS</div>
+                      <dl className="history-metadata">
+                        <div><dt>Rewrite state</dt><dd>{rewrite.enabled === true ? "Enabled" : rewrite.enabled === false ? "Disabled" : "—"}{rewrite.changed === true ? <small>Changed</small> : rewrite.changed === false ? <small>Unchanged</small> : null}</dd></div>
+                        <div><dt>Rewrite model</dt><dd>{display(rewrite.model)}{rewrite.provider ? <small>{display(rewrite.provider)}</small> : null}</dd></div>
+                        <div><dt>Dictionary</dt><dd>{Number.isFinite(appliedCount) ? `${appliedCount} applied` : "—"}</dd></div>
+                        <div><dt>Attempts</dt><dd>{attemptLabel(detail?.attempts)}</dd></div>
+                        <div><dt>Audio</dt><dd>{audioSummary}</dd></div>
+                        <div><dt>Request ID</dt><dd><code>{item.request_id}</code></dd></div>
+                      </dl>
+                    </section>
+                  </div>
                 </div>
               )}
             </article>

@@ -129,7 +129,7 @@ class CoreTests(unittest.TestCase):
     def test_normal_synthesis_saves_request_and_audio_history(self):
         preview = {
             "speech_text": "読み上げ本文",
-            "rewrite": {"elapsed_ms": 1, "enabled": True, "changed": True, "provider": "test", "model": "test", "error": None},
+            "rewrite": {"elapsed_ms": 30, "enabled": True, "changed": True, "provider": "test", "model": "test", "error": None},
             "dictionary": {"enabled": False, "selected": [], "selected_count": 0, "applied": [], "warnings": []},
         }
         with tempfile.TemporaryDirectory() as tmp, \
@@ -138,6 +138,7 @@ class CoreTests(unittest.TestCase):
              patch("irodori_tts_request._start_server"), \
              patch("irodori_tts_request._request_speech", return_value=b"audio"), \
              patch("irodori_tts_history.record_audio", return_value={"audio_id": "audio-1", "url": "/api/audio/audio-1"}) as record_audio, \
+             patch("irodori_tts_request._elapsed_ms", side_effect=[2, 100, 1, 104]), \
              patch("irodori_tts_request._write_metrics") as write_metrics:
             result = synthesize_text("input", Path(tmp) / "out.mp3")
 
@@ -145,5 +146,7 @@ class CoreTests(unittest.TestCase):
         record_audio.assert_called_once()
         self.assertEqual(write_metrics.call_args.args[1]["status"], "ok")
         self.assertEqual(write_metrics.call_args.args[1]["input"], "input")
+        self.assertEqual(write_metrics.call_args.args[1]["attempts"], 1)
+        self.assertEqual(write_metrics.call_args.args[1]["timing_ms"]["total"], 134)
 
 if __name__ == "__main__": unittest.main()

@@ -145,6 +145,7 @@ def _request_detail(record: dict) -> dict:
             "applied": record.get("dictionary_applied"),
         },
         "timing_ms": record.get("timing_ms") if isinstance(record.get("timing_ms"), dict) else {},
+        "attempts": record.get("attempts"),
         "output_bytes": record.get("output_bytes"),
         "error": record.get("error"),
     }

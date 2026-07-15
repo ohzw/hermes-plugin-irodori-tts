@@ -58,12 +58,13 @@ class DashboardServiceTests(unittest.TestCase):
     @patch("irodori_tts_dashboard_service.list_history", return_value=[])
     def test_request_detail_uses_bounded_history(self, _audio, records, text_history):
         records.return_value = []
-        text_history.return_value = [{"request_id": "req-1", "original_text": "元の全文", "speech_text": "読み上げ全文"}]
+        text_history.return_value = [{"request_id": "req-1", "original_text": "元の全文", "speech_text": "読み上げ全文", "attempts": 2}]
 
         result = get_request_detail("req-1")
 
         self.assertEqual(result["original_text"], "元の全文")
         self.assertEqual(result["speech_text"], "読み上げ全文")
+        self.assertEqual(result["attempts"], 2)
         records.assert_not_called()
 
 
