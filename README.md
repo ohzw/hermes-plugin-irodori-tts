@@ -179,6 +179,22 @@ The `.gitignore` excludes:
 
 Review `git status` before every release, especially if you use real voices or private text in local testing.
 
+## Responsible voice use
+
+Use only reference audio and speaker embeddings that you have the right to use, and obtain the speaker's explicit consent before cloning or imitating an identifiable person's voice. Do not use generated speech to impersonate someone, mislead others, or spread misinformation.
+
+Generated audio is not automatically covered by this repository's MIT License. Its use may also depend on the input text, reference audio, speaker consent, model terms, and applicable law. Irodori's watermarking can depend on optional runtime assets, so this plugin does not claim that every output is watermarked.
+
 ## License
 
-MIT. Irodori-TTS-Server, checkpoints, and voice assets are separate projects/assets with their own licenses and terms.
+The code in this repository is released under the [MIT License](LICENSE).
+
+This license does not cover external software, model weights, codecs, reference audio, speaker embeddings, or generated audio. They are not bundled and remain subject to their respective licenses, model cards, usage terms, and third-party rights:
+
+- [Irodori-TTS](https://github.com/Aratako/Irodori-TTS) — upstream code and license
+- [Irodori-TTS-Server](https://github.com/Aratako/Irodori-TTS-Server) — separately installed server code and license
+- [Irodori-TTS-500M-v3](https://huggingface.co/Aratako/Irodori-TTS-500M-v3) — model card, license declaration, and ethical restrictions
+- [Irodori-TTS-600M-v3-VoiceDesign](https://huggingface.co/Aratako/Irodori-TTS-600M-v3-VoiceDesign) — model card, license declaration, and ethical restrictions
+- [Semantic-DACVAE-Japanese-32dim](https://huggingface.co/Aratako/Semantic-DACVAE-Japanese-32dim) — codec model card and license declaration
+
+If upstream code or other third-party material is copied into a future release, preserve its copyright and license notices as required by that material's license.
