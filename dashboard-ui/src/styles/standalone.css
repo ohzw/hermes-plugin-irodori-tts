@@ -18,3 +18,9 @@ body {
 #root > .irodori-plugin-root.app-shell > .shell-sidebar {
   height: 100vh;
 }
+
+@media (max-width: 980px) {
+  #root > .irodori-plugin-root.app-shell > .shell-sidebar {
+    height: auto;
+  }
+}
