@@ -51,13 +51,11 @@ def record_request_history(record: dict, *, max_entries: int = DEFAULT_MAX_ENTRI
     request_id = str(record.get("request_id") or "")
     if not request_id:
         return
-    row = {
-        "request_id": request_id,
-        "ts": record.get("ts"),
-        "status": record.get("status"),
-        "original_text": record.get("input") if isinstance(record.get("input"), str) else "",
-        "speech_text": record.get("speech_text") if isinstance(record.get("speech_text"), str) else "",
-    }
+    row = dict(record)
+    row["request_id"] = request_id
+    row["original_text"] = record.get("input") if isinstance(record.get("input"), str) else ""
+    row["speech_text"] = record.get("speech_text") if isinstance(record.get("speech_text"), str) else ""
+    row.pop("input", None)
     count = max(1, int(max_entries))
     with _LOCK:
         rows = [item for item in _read() if item.get("request_id") != request_id]

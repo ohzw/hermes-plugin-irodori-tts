@@ -14,7 +14,6 @@ from typing import BinaryIO
 from irodori_tts_config import hermes_home, provider_config
 
 DEFAULT_MAX_ENTRIES = 50
-DEFAULT_MAX_TOTAL_BYTES = 524_288_000
 DEFAULT_PREVIEW_MAX_CHARS = 240
 KNOWN_FORMATS = {
     "mp3": (".mp3", "audio/mpeg"),
@@ -34,7 +33,7 @@ def history_path() -> Path:
     return hermes_home() / "logs" / "tts-rewrite" / "audio_history.jsonl"
 
 
-def _settings(provider_name: str = "irodori-local") -> tuple[bool, int, int, int]:
+def _settings(provider_name: str = "irodori-local") -> tuple[bool, int, int]:
     provider = provider_config(provider_name)
     nested = provider.get("audio_history") if isinstance(provider.get("audio_history"), dict) else None
     dashboard = provider.get("dashboard") if isinstance(provider.get("dashboard"), dict) else {}
@@ -59,20 +58,16 @@ def _settings(provider_name: str = "irodori-local") -> tuple[bool, int, int, int
         return default
 
     enabled = setting("enabled", "audio_history_enabled", True)
-    max_bytes = cfg.get("max_bytes", cfg.get("max_total_bytes"))
-    if max_bytes is None:
-        max_bytes = provider.get("audio_history_max_bytes", dashboard.get("audio_history_max_bytes", DEFAULT_MAX_TOTAL_BYTES))
     return (
         enabled is not False,
         integer(setting("max_entries", "audio_history_max_entries", DEFAULT_MAX_ENTRIES), DEFAULT_MAX_ENTRIES),
-        integer(max_bytes, DEFAULT_MAX_TOTAL_BYTES),
         integer(setting("preview_max_chars", "preview_max_chars", DEFAULT_PREVIEW_MAX_CHARS), DEFAULT_PREVIEW_MAX_CHARS),
     )
 
 
 def history_status(provider_name: str = "irodori-local") -> dict:
-    enabled, max_entries, max_bytes, preview_max_chars = _settings(provider_name)
-    return {"enabled": enabled, "max_entries": max_entries, "max_bytes": max_bytes, "preview_max_chars": preview_max_chars}
+    enabled, max_entries, preview_max_chars = _settings(provider_name)
+    return {"enabled": enabled, "max_entries": max_entries, "preview_max_chars": preview_max_chars}
 
 
 def _preview(value: object, limit: int) -> str:
@@ -119,7 +114,7 @@ def _sanitize(entry: dict) -> dict:
 
 
 def list_history(limit: int = 20, provider_name: str = "irodori-local") -> list[dict]:
-    enabled, _, _, _ = _settings(provider_name)
+    enabled, _, _ = _settings(provider_name)
     if not enabled:
         return []
     try:
@@ -132,7 +127,7 @@ def list_history(limit: int = 20, provider_name: str = "irodori-local") -> list[
 
 
 def resolve_audio(audio_id: str) -> tuple[Path, str] | None:
-    enabled, _, _, _ = _settings()
+    enabled, _, _ = _settings()
     if not enabled:
         return None
     if not isinstance(audio_id, str) or not audio_id or "/" in audio_id or "\\" in audio_id or audio_id in {".", ".."}:
@@ -166,7 +161,7 @@ def record_audio(source: Path | str | bytes | bytearray | BinaryIO, *, request_i
         data = source.read()
     if not data:
         raise ValueError("audio is empty")
-    enabled, max_entries, max_total_bytes, preview_limit = _settings(provider_name)
+    enabled, max_entries, preview_limit = _settings(provider_name)
     if not enabled:
         return {"status": "disabled", "audio_id": None, "url": None, "format": fmt, "bytes": len(data), "input_preview": _preview(input_text, preview_limit), "speech_preview": _preview(speech_text, preview_limit)}
     now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds")
@@ -178,7 +173,7 @@ def record_audio(source: Path | str | bytes | bytearray | BinaryIO, *, request_i
     with _LOCK:
         target.write_bytes(data)
         entries = _read_entries() + [entry]
-        while len(entries) > max_entries or sum(int(item.get("bytes") or 0) for item in entries) > max_total_bytes:
+        while len(entries) > max_entries:
             removed = entries.pop(0)
             old = Path(str(removed.get("path") or ""))
             if old.is_file() and audio_dir().resolve() in old.resolve().parents:
@@ -188,3 +183,24 @@ def record_audio(source: Path | str | bytes | bytearray | BinaryIO, *, request_i
                     pass
         _write_entries(entries)
     return _sanitize(entry)
+
+
+def retain_request_audio(request_ids: set[str], provider_name: str = "irodori-local") -> None:
+    enabled, _, _ = _settings(provider_name)
+    if not enabled:
+        return
+    retained_ids = {str(request_id) for request_id in request_ids if request_id}
+    with _LOCK:
+        entries = _read_entries()
+        retained = []
+        for entry in entries:
+            if str(entry.get("request_id") or "") in retained_ids:
+                retained.append(entry)
+                continue
+            old = Path(str(entry.get("path") or ""))
+            if old.is_file() and audio_dir().resolve() in old.resolve().parents:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        _write_entries(retained)

@@ -36,20 +36,20 @@ class AudioHistoryTests(unittest.TestCase):
         self.assertIsNone(history.resolve_audio("../secret"))
         self.assertIsNone(history.resolve_audio("unknown"))
 
-    def test_registry_never_returns_raw_path_and_retention_removes_oldest(self):
-        with mock.patch.object(history, "_settings", return_value=(True, 2, 5, 240)):
+    def test_registry_never_returns_raw_path_and_retention_removes_oldest_by_count(self):
+        with mock.patch.object(history, "_settings", return_value=(True, 2, 240)):
             first = history.record_audio(b"123", request_id="1")
-            second = history.record_audio(b"45", request_id="2")
-            third = history.record_audio(b"6", request_id="3")
+            second = history.record_audio(b"456", request_id="2")
+            third = history.record_audio(b"789", request_id="3")
         listed = history.list_history(20)
         self.assertEqual([item["request_id"] for item in listed], ["3", "2"])
         self.assertTrue(all("path" not in item for item in listed))
         self.assertIsNone(history.resolve_audio(first["audio_id"]))
-        self.assertEqual(history.resolve_audio(second["audio_id"])[0].read_bytes(), b"45")
+        self.assertEqual(history.resolve_audio(second["audio_id"])[0].read_bytes(), b"456")
         raw = history.history_path().read_text(encoding="utf-8")
         self.assertTrue(all("path" in json.loads(line) for line in raw.splitlines()))
     def test_disabled_history_does_not_persist(self):
-        with mock.patch.object(history, "_settings", return_value=(False, 50, 524288000, 240)):
+        with mock.patch.object(history, "_settings", return_value=(False, 50, 240)):
             entry = history.record_audio(b"audio", request_id="disabled")
             self.assertEqual(entry["status"], "disabled")
             self.assertIsNone(entry["audio_id"])
@@ -61,11 +61,20 @@ class AudioHistoryTests(unittest.TestCase):
             "tts:\n  providers:\n    irodori-local:\n      dashboard:\n"
             "        audio_history_enabled: false\n"
             "        audio_history_max_entries: 12\n"
-            "        audio_history_max_bytes: 13\n"
             "        preview_max_chars: 14\n",
             encoding="utf-8",
         )
-        self.assertEqual(history.history_status(), {"enabled": False, "max_entries": 12, "max_bytes": 13, "preview_max_chars": 14})
+        self.assertEqual(history.history_status(), {"enabled": False, "max_entries": 12, "preview_max_chars": 14})
+
+    def test_pruning_to_recent_requests_removes_stale_audio(self):
+        first = history.record_audio(b"one", request_id="req-1")
+        second = history.record_audio(b"two", request_id="req-2")
+
+        history.retain_request_audio({"req-2"})
+
+        self.assertIsNone(history.resolve_audio(first["audio_id"]))
+        self.assertEqual(history.resolve_audio(second["audio_id"])[0].read_bytes(), b"two")
+        self.assertEqual([item["request_id"] for item in history.list_history(20)], ["req-2"])
 
 
 if __name__ == "__main__":

@@ -93,10 +93,19 @@ class CoreTests(unittest.TestCase):
              }), \
              patch("irodori_tts_request._start_server"), \
              patch("irodori_tts_request._request_speech", side_effect=fake_request), \
-             patch("irodori_tts_history.record_audio", return_value={"audio_id": "id", "url": "/api/audio/id"}):
-            result = synthesize_text("input", Path(tmp) / "out.mp3", call_llm=False, output_format="mp3")
+             patch("irodori_tts_history.record_audio") as record_audio:
+            result = synthesize_text(
+                "input",
+                Path(tmp) / "out.mp3",
+                call_llm=False,
+                output_format="mp3",
+                save_history=False,
+            )
 
         self.assertEqual(result["status"], "ok")
+        self.assertIsNone(result["audio_id"])
+        self.assertIsNone(result["url"])
+        record_audio.assert_not_called()
         payload = captured["payload"]
         self.assertEqual(payload["input"], "読み上げ本文")
         self.assertEqual(payload["speed"], 1.25)
@@ -116,5 +125,25 @@ class CoreTests(unittest.TestCase):
             "max_caption_len": 120,
             "seed": 1234,
         })
+
+    def test_normal_synthesis_saves_request_and_audio_history(self):
+        preview = {
+            "speech_text": "読み上げ本文",
+            "rewrite": {"elapsed_ms": 1, "enabled": True, "changed": True, "provider": "test", "model": "test", "error": None},
+            "dictionary": {"enabled": False, "selected": [], "selected_count": 0, "applied": [], "warnings": []},
+        }
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch("irodori_tts_config.provider_config", return_value={"request_attempts": 1}), \
+             patch("irodori_tts_core.rewrite_preview", return_value=preview), \
+             patch("irodori_tts_request._start_server"), \
+             patch("irodori_tts_request._request_speech", return_value=b"audio"), \
+             patch("irodori_tts_history.record_audio", return_value={"audio_id": "audio-1", "url": "/api/audio/audio-1"}) as record_audio, \
+             patch("irodori_tts_request._write_metrics") as write_metrics:
+            result = synthesize_text("input", Path(tmp) / "out.mp3")
+
+        self.assertEqual(result["audio_id"], "audio-1")
+        record_audio.assert_called_once()
+        self.assertEqual(write_metrics.call_args.args[1]["status"], "ok")
+        self.assertEqual(write_metrics.call_args.args[1]["input"], "input")
 
 if __name__ == "__main__": unittest.main()

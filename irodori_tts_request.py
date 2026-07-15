@@ -17,7 +17,7 @@ from urllib.parse import urlsplit, urlunsplit
 import urllib.error
 import urllib.request
 
-from irodori_tts_request_history import record_request_history
+from irodori_tts_request_history import list_request_history, record_request_history
 
 try:
     import yaml
@@ -486,11 +486,35 @@ def _metrics_config(cfg: dict) -> dict:
 
 
 def _write_metrics(cfg: dict, record: dict) -> None:
-    record_request_history(dict(record))
+    from irodori_tts_history import history_status, list_history, retain_request_audio
+    from irodori_tts_metrics import load_records
     metrics = _metrics_config(cfg)
-    if not _coerce_bool(metrics.get("enabled"), True):
-        return
+    metrics_enabled = _coerce_bool(metrics.get("enabled"), True)
     log_path = Path(str(metrics.get("log_path") or "~/.hermes/logs/tts-rewrite/timings.jsonl")).expanduser()
+    max_entries = min(int(history_status().get("max_entries") or 50), 50)
+    if metrics_enabled and not list_request_history(limit=1):
+        audio_by_request = {
+            str(item.get("request_id") or ""): item
+            for item in list_history(limit=max_entries)
+        }
+        for legacy in load_records(log_path, limit=max_entries - 1):
+            request_id = str(legacy.get("request_id") or "")
+            if not request_id:
+                continue
+            migrated = dict(legacy)
+            audio = audio_by_request.get(request_id, {})
+            migrated["input"] = migrated.get("input") or audio.get("input_preview") or ""
+            migrated["speech_text"] = migrated.get("speech_text") or audio.get("speech_preview") or ""
+            record_request_history(migrated, max_entries=max_entries)
+    record_request_history(dict(record), max_entries=max_entries)
+    retained_ids = {
+        str(item.get("request_id"))
+        for item in list_request_history(limit=max_entries)
+        if item.get("request_id")
+    }
+    retain_request_audio(retained_ids)
+    if not metrics_enabled:
+        return
     log_path.parent.mkdir(parents=True, exist_ok=True)
     include_text = _coerce_bool(metrics.get("include_text"), False)
     if not include_text:

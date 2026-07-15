@@ -110,6 +110,27 @@ class DashboardPluginTests(unittest.TestCase):
             result = asyncio.run(api.request_detail("req-1", make_request("/api/requests/req-1")))
         self.assertEqual("/api/audio/audio-1", result["audio"]["url"])
 
+    def test_playground_synthesis_does_not_save_history(self):
+        api = load_api_module()
+
+        def synthesize(_text, output_path, **_kwargs):
+            output_path.write_bytes(b"audio")
+            return {
+                "status": "ok",
+                "request_id": "playground-1",
+                "audio_id": None,
+                "url": None,
+                "rewrite": {},
+                "dictionary": {},
+                "timing_ms": {},
+            }
+
+        with mock.patch.object(api, "synthesize_text", side_effect=synthesize) as synthesis:
+            result = asyncio.run(api.playground_tts({"text": "テスト"}, make_request("/api/playground/tts")))
+
+        self.assertTrue(result["ok"])
+        self.assertFalse(synthesis.call_args.kwargs["save_history"])
+
 
 if __name__ == "__main__":
     unittest.main()

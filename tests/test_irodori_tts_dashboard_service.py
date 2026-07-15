@@ -13,13 +13,16 @@ class DashboardServiceTests(unittest.TestCase):
         for key in ("now", "health", "config", "summary", "recent", "dictionary", "server_log"):
             self.assertIn(key, result)
 
-    @patch("irodori_tts_dashboard_service.get_public_status")
-    def test_recent_requests_exposes_original_text_but_keeps_speech_text_in_detail(self, public_status):
+    @patch("irodori_tts_dashboard_service.list_request_history")
+    def test_recent_requests_exposes_original_text_but_keeps_speech_text_in_detail(self, request_history):
         original = "一行目。\n二行目も省略せずに表示する。"
-        public_status.return_value = {
-            "recent": [{"request_id": "req-1", "input": original, "speech_text": "rewrite後"}],
-            "summary": {},
-        }
+        request_history.return_value = [{
+            "request_id": "req-1",
+            "original_text": original,
+            "speech_text": "rewrite後",
+            "status": "ok",
+            "timing_ms": {},
+        }]
 
         result = get_recent_requests(limit=5)
 
@@ -27,17 +30,17 @@ class DashboardServiceTests(unittest.TestCase):
         self.assertNotIn("input", result["requests"][0])
         self.assertNotIn("speech_text", result["requests"][0])
 
-    @patch("irodori_tts_dashboard_service.get_public_status")
-    def test_recent_requests_joins_text_from_bounded_request_history(self, public_status):
-        public_status.return_value = {
-            "recent": [{"request_id": "req-1", "status": "ok"}],
-            "summary": {},
-        }
-        saved = [{"request_id": "req-1", "original_text": "保存された元の文言", "speech_text": "読み上げ文"}]
-        with patch("irodori_tts_dashboard_service.list_request_history", return_value=saved, create=True):
-            result = get_recent_requests(limit=5)
+    @patch("irodori_tts_dashboard_service.list_request_history")
+    def test_recent_requests_uses_bounded_request_history_as_source(self, request_history):
+        request_history.return_value = [
+            {"request_id": "req-2", "original_text": "失敗した要求", "speech_text": "", "status": "error"},
+            {"request_id": "req-1", "original_text": "保存された元の文言", "speech_text": "読み上げ文", "status": "ok"},
+        ]
 
-        self.assertEqual(result["requests"][0]["original_text"], "保存された元の文言")
+        result = get_recent_requests(limit=5)
+
+        self.assertEqual([item["request_id"] for item in result["requests"]], ["req-2", "req-1"])
+        self.assertEqual(result["requests"][0]["status"], "error")
 
     @patch("irodori_tts_dashboard_service.list_history")
     @patch("irodori_tts_dashboard_service.list_request_history", return_value=[])
@@ -50,17 +53,18 @@ class DashboardServiceTests(unittest.TestCase):
 
         self.assertEqual(result["requests"][0]["original_text"], "既存履歴のプレビュー")
 
-    @patch("irodori_tts_dashboard_service.list_history", return_value=[])
     @patch("irodori_tts_dashboard_service.list_request_history")
     @patch("irodori_tts_dashboard_service.load_records")
-    def test_request_detail_joins_original_and_speech_text_from_bounded_history(self, records, text_history, _audio):
-        records.return_value = [{"request_id": "req-1", "status": "ok", "timing_ms": {}}]
+    @patch("irodori_tts_dashboard_service.list_history", return_value=[])
+    def test_request_detail_uses_bounded_history(self, _audio, records, text_history):
+        records.return_value = []
         text_history.return_value = [{"request_id": "req-1", "original_text": "元の全文", "speech_text": "読み上げ全文"}]
 
         result = get_request_detail("req-1")
 
         self.assertEqual(result["original_text"], "元の全文")
         self.assertEqual(result["speech_text"], "読み上げ全文")
+        records.assert_not_called()
 
 
 if __name__ == "__main__": unittest.main()

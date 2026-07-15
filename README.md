@@ -107,7 +107,7 @@ The app includes:
 
 - Workspace — editable voice settings and a synthesis playground
 - Overview — health and latency metrics
-- History — request details and saved audio playback
+- History — the 50 most recent Hermes TTS requests, including failures and saved audio for successful requests
 - Dictionary — pronunciation entries and validation
 - Diagnostics — safe, allowlisted configuration and server logs
 
@@ -120,6 +120,8 @@ dashboard:
 ```
 
 The **Irodori TTS** tab in Hermes is intentionally only a Start/Open/Stop launcher. The dashboard API can edit only explicitly allowlisted Irodori settings. Server commands, tokens, arbitrary prompts, and credentials remain read-only.
+
+History excludes synthesis performed in the dashboard Playground. Retries remain part of one request record. When a 51st Hermes TTS request is recorded, the oldest request and its saved History audio are removed together; retention has no total-byte or age limit.
 
 ## Development
 

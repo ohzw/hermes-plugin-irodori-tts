@@ -87,6 +87,15 @@ def get_config_view(provider_name: str = "irodori-local") -> dict:
     return safe_config_view(provider_name)
 
 def get_recent_requests(limit: int = 30) -> dict:
+    saved_requests = list_request_history(limit=limit)
+    if saved_requests:
+        requests = []
+        for record in saved_requests:
+            summary = dict(record)
+            summary.pop("speech_text", None)
+            requests.append(summary)
+        return {"requests": requests, "summary": summarize(list(reversed(saved_requests)))}
+
     status = get_public_status(limit)
     text_by_request = {str(item.get("request_id") or ""): item for item in list_request_history(limit=50)}
     audio_by_request = {str(item.get("request_id") or ""): item for item in list_history(limit=50)}
@@ -121,7 +130,7 @@ def _request_detail(record: dict) -> dict:
         "request_id": record.get("request_id"),
         "ts": record.get("ts"),
         "status": record.get("status"),
-        "original_text": _truncate(record.get("input")),
+        "original_text": _truncate(record.get("original_text", record.get("input"))),
         "speech_text": _truncate(record.get("speech_text")),
         "rewrite": {
             "enabled": record.get("rewrite_enabled"),
@@ -145,26 +154,28 @@ def _request_detail(record: dict) -> dict:
     return detail
 
 
+def _attach_audio(detail: dict, request_id: str) -> dict:
+    audio = next((item for item in list_history(limit=50) if str(item.get("request_id") or "") == str(request_id)), None)
+    if audio:
+        detail["audio"] = {
+            "audio_id": audio.get("audio_id"),
+            "url": audio.get("url"),
+            "format": audio.get("format"),
+            "bytes": audio.get("bytes"),
+            "created_at": audio.get("created_at"),
+            "status": audio.get("status"),
+            "input_preview": audio.get("input_preview"),
+            "speech_preview": audio.get("speech_preview"),
+        }
+        detail["audio_id"] = audio.get("audio_id")
+    return detail
+
+
 def get_request_detail(request_id: str) -> dict:
     saved_text = next((item for item in list_request_history(limit=50) if str(item.get("request_id") or "") == str(request_id)), None)
+    if saved_text:
+        return _attach_audio(_request_detail(saved_text), request_id)
     for record in load_records(DEFAULT_LOG, limit=1000):
         if str(record.get("request_id") or "") == str(request_id):
-            detail = _request_detail(record)
-            if saved_text:
-                detail["original_text"] = saved_text.get("original_text")
-                detail["speech_text"] = saved_text.get("speech_text")
-            audio = next((item for item in list_history(limit=50) if str(item.get("request_id") or "") == str(request_id)), None)
-            if audio:
-                detail["audio"] = {
-                    "audio_id": audio.get("audio_id"),
-                    "url": audio.get("url"),
-                    "format": audio.get("format"),
-                    "bytes": audio.get("bytes"),
-                    "created_at": audio.get("created_at"),
-                    "status": audio.get("status"),
-                    "input_preview": audio.get("input_preview"),
-                    "speech_preview": audio.get("speech_preview"),
-                }
-                detail["audio_id"] = audio.get("audio_id")
-            return detail
+            return _attach_audio(_request_detail(record), request_id)
     return {}

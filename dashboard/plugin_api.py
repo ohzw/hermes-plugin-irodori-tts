@@ -320,6 +320,7 @@ async def playground_tts(payload: dict[str, Any], request: Request):
             output_format=output_format,
             call_llm=bool(payload.get("call_llm", False)),
             apply_dictionary=bool(payload.get("apply_dictionary", True)),
+            save_history=False,
         )
         if result.get("status") != "ok" or not output_path.is_file():
             raise HTTPException(status_code=502, detail=result.get("error") or "TTS generation failed")

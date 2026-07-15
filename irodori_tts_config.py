@@ -101,10 +101,6 @@ def safe_config_view(provider_name: str = "irodori-local") -> dict:
         if flat_key in dashboard:
             return dashboard.get(flat_key)
         return default
-    audio_history_max_bytes = audio_history.get("max_bytes", audio_history.get("max_total_bytes"))
-    if audio_history_max_bytes is None:
-        audio_history_max_bytes = provider.get("audio_history_max_bytes", dashboard.get("audio_history_max_bytes", 524288000))
-
     dictionary_file = dictionary_path(provider_name)
     warnings = []
     if not dictionary_file.exists():
@@ -175,9 +171,8 @@ def safe_config_view(provider_name: str = "irodori-local") -> dict:
         _group("audio-history", "Audio History / Privacy", [
             _item("enabled", "Audio history enabled", audio_history_value("enabled", "audio_history_enabled", True), help_text="Generated audio is stored locally for dashboard history; disable via Hermes config."),
             _item("max_entries", "Maximum entries", audio_history_value("max_entries", "audio_history_max_entries", 50)),
-            _item("max_bytes", "Maximum bytes", audio_history_max_bytes),
             _item("preview_max_chars", "Preview characters", audio_history_value("preview_max_chars", "preview_max_chars", 240)),
-            _item("storage_note", "Storage", "Generated audio and capped previews are stored locally.", source="runtime", help_text="Stored under the Hermes logs directory; no local path is exposed here. Disable via config; this dashboard does not edit config."),
+            _item("storage_note", "Storage", "The most recent requests and their generated audio are stored locally.", source="runtime", help_text="Stored under the Hermes logs directory; no local path is exposed here. Disable via config; this dashboard does not edit config."),
         ]),
         _group("paths", "Paths", [
             _item("dictionary_path", "Dictionary", str(dictionary_file), source="config/default"),

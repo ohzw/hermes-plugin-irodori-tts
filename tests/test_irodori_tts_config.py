@@ -27,7 +27,7 @@ class ConfigTests(unittest.TestCase):
             values = {item["key"]: item["value"] for item in group["items"]}
             self.assertEqual(values["enabled"], True)
             self.assertEqual(values["max_entries"], 50)
-            self.assertEqual(values["max_bytes"], 524288000)
+            self.assertNotIn("max_bytes", values)
             self.assertEqual(values["preview_max_chars"], 240)
             self.assertNotIn("~/.hermes/logs", repr(view))
 
@@ -37,7 +37,6 @@ class ConfigTests(unittest.TestCase):
                 "tts:\n  providers:\n    irodori-local:\n      dashboard:\n"
                 "        audio_history_enabled: false\n"
                 "        audio_history_max_entries: 12\n"
-                "        audio_history_max_bytes: 13\n"
                 "        preview_max_chars: 14\n",
                 encoding="utf-8",
             )
@@ -46,7 +45,7 @@ class ConfigTests(unittest.TestCase):
             values = {item["key"]: item["value"] for item in group["items"]}
             self.assertEqual(values["enabled"], False)
             self.assertEqual(values["max_entries"], 12)
-            self.assertEqual(values["max_bytes"], 13)
+            self.assertNotIn("max_bytes", values)
             self.assertEqual(values["preview_max_chars"], 14)
 
     def test_safe_view_is_grouped_and_allowlisted(self):
