@@ -6,6 +6,7 @@ import io
 import os
 import sys
 import tempfile
+import types
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_plugin_module():
+    for name in list(sys.modules):
+        if name == "hermes_irodori_plugin" or name.startswith("hermes_irodori_plugin."):
+            sys.modules.pop(name, None)
     spec = importlib.util.spec_from_file_location(
         "hermes_irodori_plugin",
         ROOT / "__init__.py",
@@ -25,7 +29,12 @@ def load_plugin_module():
     )
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
-    spec.loader.exec_module(module)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     return module
 
 
@@ -42,6 +51,20 @@ class FakeContext:
 
 
 class PluginIntegrationTests(unittest.TestCase):
+    def test_plugin_ignores_stale_top_level_synthesis_module(self):
+        stale = types.ModuleType("irodori_tts_core")
+        stale_synthesize = mock.Mock(name="stale_synthesize_text")
+        setattr(stale, "synthesize_text", stale_synthesize)
+
+        with mock.patch.dict(sys.modules, {"irodori_tts_core": stale}):
+            plugin = load_plugin_module()
+
+        self.assertIsNot(plugin.synthesize_text, stale_synthesize)
+        self.assertEqual(
+            "hermes_irodori_plugin.irodori_tts_core",
+            plugin.synthesize_text.__module__,
+        )
+
     def test_plugin_loads_when_its_directory_is_not_the_working_directory(self):
         original_cwd = Path.cwd()
         original_path = list(sys.path)

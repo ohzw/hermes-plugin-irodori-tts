@@ -17,9 +17,9 @@ PLUGIN_ROOT = Path(__file__).resolve().parent
 if str(PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT))
 
-from irodori_tts_config import hermes_home, provider_config
-from irodori_tts_core import synthesize_text
-from irodori_tts_dashboard_service import get_public_status
+from .irodori_tts_config import hermes_home, provider_config
+from .irodori_tts_core import synthesize_text
+from .irodori_tts_dashboard_service import get_public_status
 
 
 PROVIDER_NAME = "irodori-local"
