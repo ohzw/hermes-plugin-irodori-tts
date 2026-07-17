@@ -15,13 +15,13 @@ const baseConfig = {revision: 'r1', values: {caption: 'server'}, schema: {fields
 const baseDictionary = [{id: 'd1', surface: 'old', reading: 'おーるど', enabled: true}];
 let serverConfig = baseConfig;
 let serverDictionary = baseDictionary;
-let serverRequests: RequestRecord[] = [{request_id: 'one', status: 'ok', original_text: 'first', audio_id: 'audio', timing_ms: {}}];
+let serverRequests: RequestRecord[] = [{request_id: 'one', status: 'ok', original_text: 'first', audio_id: 'audio', timing_ms: {total: 10}}];
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/overview');
   serverConfig = structuredClone(baseConfig);
   serverDictionary = structuredClone(baseDictionary);
-  serverRequests = [{request_id: 'one', status: 'ok', original_text: 'first', audio_id: 'audio', timing_ms: {}}];
+  serverRequests = [{request_id: 'one', status: 'ok', original_text: 'first', audio_id: 'audio', timing_ms: {total: 10}}];
   vi.useRealTimers();
   vi.restoreAllMocks();
   Reflect.deleteProperty(globalThis, 'EventSource');
@@ -71,8 +71,8 @@ describe('dashboard state preservation', () => {
       now: 'later',
       health: {ok: true},
       recent: [
-        {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {}},
-        {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}},
+        {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {total: 30}},
+        {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {total: 20}},
         ...serverRequests,
       ],
     }));
@@ -81,8 +81,8 @@ describe('dashboard state preservation', () => {
 
   it('keeps the overview entrance animation from replaying when live data changes', async () => {
     serverRequests = [
-      {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {}},
-      {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}},
+      {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {total: 30}},
+      {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {total: 20}},
       ...serverRequests,
     ];
     await renderWithInitialLoad();
@@ -124,6 +124,20 @@ describe('dashboard state preservation', () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByDisplayValue('draft')).toBeInTheDocument();
+  });
+
+  it('uses total latency for workspace telemetry and ignores records without totals', async () => {
+    window.history.replaceState(null, '', '/workspace');
+    serverRequests = [
+      {request_id: 'missing', status: 'ok', original_text: 'missing total', timing_ms: {irodori_request: 9999}},
+      {request_id: 'valid', status: 'ok', original_text: 'valid total', timing_ms: {total: 2000, irodori_request: 100}},
+    ];
+
+    await renderWithInitialLoad();
+
+    expect(screen.getByText('2.00s')).toBeInTheDocument();
+    expect(screen.getByText('1 recent sample')).toBeInTheDocument();
+    expect(screen.queryByTestId('dither-activity')).not.toBeInTheDocument();
   });
 
   it('keeps a dirty dictionary draft across polling', async () => {

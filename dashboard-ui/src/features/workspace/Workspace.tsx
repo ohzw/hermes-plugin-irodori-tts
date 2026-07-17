@@ -177,7 +177,7 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
   };
   const groups = activeTab === 'basic' ? basicGroups : advancedGroups;
   const latestLatency = activity.at(-1);
-  const hasLatencyTrend = activity.length >= 3;
+  const hasLatencyTrend = activity.length >= 2;
   return <section className="workspace-page">
     <div className="workspace-hero">
       <div className="page-heading"><div><div className="eyebrow">WORKSPACE</div><h2>Voice workspace</h2><p>Shape a voice, then test it against real text.</p></div></div>

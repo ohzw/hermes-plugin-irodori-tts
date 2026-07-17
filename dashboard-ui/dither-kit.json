@@ -9,20 +9,20 @@
       "hash": "sha256:d6439a837bfe9f4287bdf59279f4c3c4e7f37f2994b095464b4ed6ba423aae26",
       "files": [
         {
-          "path": "components/dither-kit/button.tsx",
-          "hash": "sha256:fd2e5a37b581ce5d8c8adba291da7ccecce3ed79e331ec7a0dda25687eb170ad"
+          "path": "src/components/dither-kit/button.tsx",
+          "hash": "sha256:a6c652e6fde63e79be1b1e5fc62cdfab446841a061b26d38d44eed5595f5bd51"
         },
         {
-          "path": "components/dither-kit/lib.ts",
+          "path": "src/components/dither-kit/lib.ts",
           "hash": "sha256:41493601eb53a70f7629f6e50bad233f7185eaad42ba2397ca56ac1afcf1bb5f"
         },
         {
-          "path": "components/dither-kit/palette.ts",
-          "hash": "sha256:fd020c230ad818a5d9d6dfdfcb6ef50b0dba012c77f44f1a61449fc9a65947f7"
+          "path": "src/components/dither-kit/palette.ts",
+          "hash": "sha256:83baac8f08a5d0661c4e0b795146c3a0de5096c8a88d93edbc1f6111c3ae52e0"
         },
         {
-          "path": "components/dither-kit/pixel.ts",
-          "hash": "sha256:eea1493d54a86d164b40d69c95956238777331ded7a556f099230dab161ab5a7"
+          "path": "src/components/dither-kit/pixel.ts",
+          "hash": "sha256:02b3549fd9a9ec28508e57cea6012e2406dea3d016d2b9a30b6a29312fe334f0"
         }
       ]
     },
@@ -31,20 +31,20 @@
       "hash": "sha256:25f54f9db394e0392fc661e86f8d087ec84450eaf7cf3759c88bc4c6e2d83b7f",
       "files": [
         {
-          "path": "components/dither-kit/gradient.tsx",
-          "hash": "sha256:c5cfeaff9b5cfe88cf963109c679dc8202d2543d277e11c346f8d02c2a67dfcd"
+          "path": "src/components/dither-kit/gradient.tsx",
+          "hash": "sha256:522ada37b1c4861ff729cad4a1b85ac395c1b9261f7dbf77d9c689cc5337af83"
         },
         {
-          "path": "components/dither-kit/lib.ts",
+          "path": "src/components/dither-kit/lib.ts",
           "hash": "sha256:41493601eb53a70f7629f6e50bad233f7185eaad42ba2397ca56ac1afcf1bb5f"
         },
         {
-          "path": "components/dither-kit/palette.ts",
-          "hash": "sha256:fd020c230ad818a5d9d6dfdfcb6ef50b0dba012c77f44f1a61449fc9a65947f7"
+          "path": "src/components/dither-kit/palette.ts",
+          "hash": "sha256:83baac8f08a5d0661c4e0b795146c3a0de5096c8a88d93edbc1f6111c3ae52e0"
         },
         {
-          "path": "components/dither-kit/pixel.ts",
-          "hash": "sha256:eea1493d54a86d164b40d69c95956238777331ded7a556f099230dab161ab5a7"
+          "path": "src/components/dither-kit/pixel.ts",
+          "hash": "sha256:02b3549fd9a9ec28508e57cea6012e2406dea3d016d2b9a30b6a29312fe334f0"
         }
       ]
     }

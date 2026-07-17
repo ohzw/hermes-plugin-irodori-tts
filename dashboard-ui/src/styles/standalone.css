@@ -10,9 +10,8 @@ body {
   background-color: hsl(240 15% 4%);
   background-image:
     radial-gradient(circle at 12% 12%, hsl(264 70% 38% / .30), transparent 27%),
-    radial-gradient(circle at 90% 88%, hsl(196 78% 38% / .23), transparent 28%),
-    radial-gradient(hsl(0 0% 100% / .10) .65px, transparent .65px);
-  background-size: auto, auto, 5px 5px;
+    radial-gradient(circle at 90% 88%, hsl(196 78% 38% / .23), transparent 28%);
+  background-size: auto, auto;
 }
 
 #root > .irodori-plugin-root.app-shell {

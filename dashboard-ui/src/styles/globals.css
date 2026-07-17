@@ -229,8 +229,6 @@
   padding:12px 24px;
   border-bottom:1px solid var(--border);
   background-color:hsl(240 14% 5% / .96);
-  background-image:radial-gradient(hsl(0 0% 100% / .07) .6px,transparent .6px);
-  background-size:6px 6px;
 }
 .shell-brand { display:flex; align-items:center; gap:11px; padding:0; }
 .shell-brand strong { display:block; color:var(--text); font:650 14px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace; }
@@ -279,8 +277,8 @@
 .ui-switch::after { border-radius:0; }
 .ui-button { min-height:38px; border-radius:4px; background:var(--cyan); border-color:hsl(198 90% 70%); box-shadow:3px 3px 0 hsl(264 65% 48%); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:650; transition-property:background,color,border-color,transform; }
 .ui-button:active { transform:scale(.96); }
-.ui-button-default { border-color:transparent; background:transparent; color:var(--text); box-shadow:none; }
-.ui-button-default:hover { background:transparent; color:var(--text); }
+.ui-button-default { border-color:transparent; background:hsl(207 94% 66%); color:hsl(240 15% 5%); box-shadow:none; }
+.ui-button-default:hover { background:hsl(207 94% 62%); color:hsl(240 15% 5%); }
 .ui-button-outline { border-color:var(--border-bright); background:transparent; color:var(--cyan-strong); box-shadow:none; }
 .ui-button-ghost { border-color:transparent; background:transparent; color:var(--text-soft); box-shadow:none; }
 .ui-button-destructive { border-color:hsl(0 68% 52% / .75); background:transparent; color:var(--danger); box-shadow:none; }
@@ -305,7 +303,7 @@
 .history-timing-card,.history-transcript-panel { border-radius:4px; background:hsl(240 13% 6%); }
 .history-timing-card strong { color:var(--lime); font-variant-numeric:tabular-nums; }
 .history-metadata > div { background:hsl(240 12% 7%); }
-.diagnostic-card pre { background-image:radial-gradient(hsl(207 85% 58% / .10) .55px,transparent .55px); background-size:5px 5px; }
+.diagnostic-card pre { background-image:none; }
 
 @media (max-width:900px) {
   .irodori-plugin-root.app-shell { width:calc(100% - 20px); margin:10px auto; border-radius:14px; }
@@ -322,6 +320,6 @@
   .shell-topbar .ui-badge { padding:5px 7px; }
   .shell-navigation-link { padding:0 11px; }
   .workspace-hero { padding:18px; }
-  .workspace-telemetry { grid-template-columns:minmax(120px,.7fr) minmax(150px,1fr); width:100%; padding:18px 0 0; border-top:1px solid hsl(207 70% 52% / .28); border-left:0; }
+  .workspace-telemetry { grid-template-columns:1fr; width:100%; padding:18px 0 0; border-top:1px solid hsl(207 70% 52% / .28); border-left:0; }
   .latest-timing-grid { grid-template-columns:1fr; }
 }

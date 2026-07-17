@@ -113,7 +113,10 @@ export default function App() {
     const activity = (status.recent ?? [])
       .slice(0, 18)
       .reverse()
-      .map((record) => Number(record.timing_ms?.irodori_request ?? record.timing_ms?.total ?? 0));
+      .flatMap((record) => {
+        const total = Number(record.timing_ms?.total);
+        return record.timing_ms?.total != null && Number.isFinite(total) ? [total] : [];
+      });
     content = <Workspace config={config} activity={activity} />;
   }
   else if (tab === 'history') content = <History records={status.recent || []} />;

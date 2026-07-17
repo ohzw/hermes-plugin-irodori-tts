@@ -28,15 +28,25 @@ describe('Overview timing chart', () => {
     expect(screen.queryByTestId('chart-root')).not.toBeInTheDocument();
   });
 
-  it('shows a latest-request breakdown instead of a degenerate chart for fewer than three samples', () => {
+  it('shows a latest-request breakdown for a single sample', () => {
     render(<Overview status={{recent: [
       {request_id: 'latest', ts: '2026-07-11T15:00:00Z', timing_ms: {rewrite: 200, irodori_request: 900, total: 1200}},
-      {request_id: 'previous', ts: '2026-07-10T15:00:00Z', timing_ms: {rewrite: 100, irodori_request: 800, total: 1000}},
     ]}} />);
 
     expect(screen.getByText('Latest request timing')).toBeInTheDocument();
     expect(screen.getByText('1.20s')).toBeInTheDocument();
     expect(screen.queryByTestId('chart-root')).not.toBeInTheDocument();
+  });
+
+  it('renders a line chart once two timing samples are available', () => {
+    render(<Overview status={{recent: [
+      {request_id: 'latest', ts: '2026-07-11T15:00:00Z', timing_ms: {rewrite: 200, irodori_request: 900, total: 1200}},
+      {request_id: 'previous', ts: '2026-07-10T15:00:00Z', timing_ms: {rewrite: 100, irodori_request: 800, total: 1000}},
+    ]}} />);
+
+    expect(screen.getByTestId('chart-root')).toBeInTheDocument();
+    expect(screen.getByTestId('line-total')).toHaveAttribute('data-stroke', 'solid');
+    expect(screen.queryByTestId('area-total')).not.toBeInTheDocument();
   });
 
   it('uses one total area with component lines and orders samples oldest to newest', () => {
