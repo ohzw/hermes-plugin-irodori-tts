@@ -1,6 +1,6 @@
 import type {Status} from '../../shared/api';
-import {AreaChart} from '../../components/dither-kit/area-chart';
-import {Area, Line} from '../../components/dither-kit/area';
+import {BarChart} from '../../components/dither-kit/bar-chart';
+import {Bar} from '../../components/dither-kit/bar';
 import {XAxis} from '../../components/dither-kit/x-axis';
 import {YAxis} from '../../components/dither-kit/y-axis';
 import {Legend} from '../../components/dither-kit/legend';
@@ -31,7 +31,7 @@ function TimingVisualization({data}: {data: Array<{index: number; label: string;
     const latest = data.at(-1)!;
     return <div className="timing-state latest-timing"><div className="latest-timing-heading"><strong>Latest request timing</strong><span>{latest.label}</span></div><div className="latest-timing-grid"><div><span>Total</span><strong>{seconds(latest.total)}</strong></div><div><span>Irodori</span><strong>{seconds(latest.irodori)}</strong></div><div><span>Rewrite</span><strong>{seconds(latest.rewrite)}</strong></div></div></div>;
   }
-  return <AreaChart data={data} config={{rewrite:{label:'Rewrite',color:'grey'}, irodori:{label:'Irodori',color:'purple'}, total:{label:'Total',color:'blue'}}} margins={{top:30,right:20,bottom:28,left:52}} bloom="low" replayOnDataChange={false} className="overview-chart-canvas"><Grid horizontal vertical={false}/>{data.length === 2 ? <Line dataKey="total" variant="gradient" strokeVariant="solid"/> : <Area dataKey="total" variant="gradient" strokeVariant="solid"/>}<Line dataKey="irodori" variant="dotted" strokeVariant="solid"/><Line dataKey="rewrite" variant="hatched" strokeVariant="dashed"/><XAxis dataKey="label" maxTicks={6}/><YAxis tickFormatter={axisDuration}/><Legend isClickable align="right"/><Tooltip labelKey="label" valueFormatter={(value) => axisDuration(value)} /></AreaChart>;
+  return <BarChart data={data} config={{rewrite:{label:'Rewrite',color:'grey'}, irodori:{label:'Irodori',color:'purple'}, total:{label:'Total',color:'blue'}}} stackType="default" margins={{top:30,right:20,bottom:28,left:52}} bloom="low" replayOnDataChange={false} className="overview-chart-canvas"><Grid horizontal vertical={false}/><Bar dataKey="total" variant="gradient" strokeVariant="solid"/><Bar dataKey="irodori" variant="dotted" strokeVariant="solid"/><Bar dataKey="rewrite" variant="hatched" strokeVariant="dashed"/><XAxis dataKey="label" maxTicks={6}/><YAxis tickFormatter={axisDuration}/><Legend isClickable align="right"/><Tooltip labelKey="label" valueFormatter={(value) => axisDuration(value)} /></BarChart>;
 }
 
 export function Overview({status}: {status: Status}) {

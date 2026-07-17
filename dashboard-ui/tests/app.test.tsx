@@ -4,10 +4,10 @@ import App from '../src/App';
 import type {RequestRecord} from '../src/shared/api';
 
 const chartProps = vi.hoisted(() => ({current: null as null | Record<string, unknown>}));
-vi.mock('../src/components/dither-kit/area-chart', () => ({
-  AreaChart: (props: Record<string, unknown>) => {
+vi.mock('../src/components/dither-kit/bar-chart', () => ({
+  BarChart: (props: Record<string, unknown>) => {
     chartProps.current = props;
-    return <div data-testid="area-chart" />;
+    return <div data-testid="bar-chart" />;
   },
 }));
 
