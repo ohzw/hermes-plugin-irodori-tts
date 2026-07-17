@@ -22,10 +22,14 @@ export function Tooltip({
   labelKey,
   valueFormatter,
   variant = "default",
+  showTotal = false,
+  totalLabel = "Total",
 }: {
   labelKey?: string
   valueFormatter?: (value: number, name: string) => string
   variant?: TooltipVariant
+  showTotal?: boolean
+  totalLabel?: string
 }) {
   const chart = useCommonChart()
   const show = chart.ready && chart.hoverIndex != null
@@ -40,6 +44,7 @@ export function Tooltip({
 
   const heading = chart.heading(index, labelKey)
   const items = chart.itemsAt(index)
+  const total = items.reduce((sum, item) => sum + item.value, 0)
 
   return (
     <AnimatePresence>
@@ -96,6 +101,16 @@ export function Tooltip({
                 </span>
               </div>
             ))}
+            {showTotal && (
+              <div className="mt-0.5 flex items-center gap-1.5 border-t pt-1 font-mono text-[11px] font-semibold text-popover-foreground tabular-nums">
+                <span className="text-muted-foreground">{totalLabel}</span>
+                <span className="ml-auto pl-2 text-foreground">
+                  {valueFormatter
+                    ? valueFormatter(total, "total")
+                    : total.toLocaleString()}
+                </span>
+              </div>
+            )}
           </div>
         </motion.div>
       )}
