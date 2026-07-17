@@ -85,7 +85,10 @@ def safe_config_view(provider_name: str = "irodori-local") -> dict:
     environment-backed values, commands, and prompts from reaching the dashboard.
     """
     provider = provider_config(provider_name)
-    rewrite = provider.get("rewrite") if isinstance(provider.get("rewrite"), dict) else {}
+    rewrite_value = provider.get("rewrite")
+    rewrite = rewrite_value if isinstance(rewrite_value, dict) else {}
+    rewrite_summary_value = rewrite.get("summary")
+    rewrite_summary = rewrite_summary_value if isinstance(rewrite_summary_value, dict) else {}
     dictionary = dictionary_config(provider_name)
     metrics = provider.get("metrics") if isinstance(provider.get("metrics"), dict) else {}
     audio_history = provider.get("audio_history") if isinstance(provider.get("audio_history"), dict) else {}
@@ -138,6 +141,11 @@ def safe_config_view(provider_name: str = "irodori-local") -> dict:
             _item("temperature", "Temperature", rewrite.get("temperature")),
             _item("fallback", "Fallback", rewrite.get("fallback")),
             _item("debug_save", "Debug save", rewrite.get("debug_save")),
+            _item("summary.enabled", "Long-response summary", rewrite_summary.get("enabled", True)),
+            _item("summary.trigger_chars", "Summary trigger characters", rewrite_summary.get("trigger_chars", 1200)),
+            _item("summary.target_chars", "Summary target characters", rewrite_summary.get("target_chars", 350)),
+            _item("summary.max_chars", "Summary maximum characters", rewrite_summary.get("max_chars", 400)),
+            _item("summary.max_input_chars", "Summary maximum input characters", rewrite_summary.get("max_input_chars", 16000)),
         ]),
         _group("pronunciation-dictionary", "Pronunciation Dictionary", [
             _item("enabled", "Enabled", dictionary.get("enabled")),

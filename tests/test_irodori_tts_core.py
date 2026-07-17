@@ -1,5 +1,7 @@
 import json
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -54,6 +56,86 @@ class CoreTests(unittest.TestCase):
             result = rewrite_preview("GitHub", call_llm=False, apply_dictionary=False)
         self.assertFalse(result["dictionary"]["enabled"])
         self.assertEqual(result["dictionary"]["selected"], [])
+
+    def test_long_rewrite_uses_adaptive_spoken_summary_policy(self):
+        captured = {}
+        auxiliary = types.ModuleType("agent.auxiliary_client")
+
+        def fake_call_llm(**kwargs):
+            captured.update(kwargs)
+            return {"content": "結論と重要点を短くまとめた読み上げ文です。"}
+
+        setattr(auxiliary, "call_llm", fake_call_llm)
+        setattr(auxiliary, "extract_content_or_reasoning", lambda response: response["content"])
+        agent = types.ModuleType("agent")
+        setattr(agent, "auxiliary_client", auxiliary)
+        config = {
+            "rewrite": {
+                "enabled": True,
+                "summary": {
+                    "enabled": True,
+                    "trigger_chars": 20,
+                    "target_chars": 350,
+                    "max_chars": 400,
+                    "max_input_chars": 16000,
+                },
+            },
+        }
+
+        with patch("irodori_tts_config.provider_config", return_value=config), \
+             patch.dict(sys.modules, {"agent": agent, "agent.auxiliary_client": auxiliary}):
+            result = rewrite_preview("長い回答です。" * 10)
+
+        system_prompt = captured["messages"][0]["content"]
+        self.assertIn("300〜400文字", system_prompt)
+        self.assertIn("結論", system_prompt)
+        self.assertTrue(result["rewrite"]["summary_applied"])
+        self.assertEqual(result["rewrite"]["summary_target_chars"], 350)
+        self.assertEqual(result["speech_text"], "結論と重要点を短くまとめた読み上げ文です。")
+
+    def test_short_rewrite_does_not_apply_spoken_summary(self):
+        captured = {}
+        auxiliary = types.ModuleType("agent.auxiliary_client")
+        setattr(auxiliary, "call_llm", lambda **kwargs: captured.update(kwargs) or {"content": "短い読み上げ文です。"})
+        setattr(auxiliary, "extract_content_or_reasoning", lambda response: response["content"])
+        agent = types.ModuleType("agent")
+        setattr(agent, "auxiliary_client", auxiliary)
+        config = {"rewrite": {"enabled": True, "summary": {"enabled": True, "trigger_chars": 20}}}
+
+        with patch("irodori_tts_config.provider_config", return_value=config), \
+             patch.dict(sys.modules, {"agent": agent, "agent.auxiliary_client": auxiliary}):
+            result = rewrite_preview("短い回答です。")
+
+        self.assertNotIn("長文の読み上げ要約モード", captured["messages"][0]["content"])
+        self.assertFalse(result["rewrite"]["summary_applied"])
+
+    def test_failed_long_rewrite_fallback_does_not_read_entire_original(self):
+        auxiliary = types.ModuleType("agent.auxiliary_client")
+        setattr(auxiliary, "call_llm", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+        setattr(auxiliary, "extract_content_or_reasoning", lambda response: response["content"])
+        agent = types.ModuleType("agent")
+        setattr(agent, "auxiliary_client", auxiliary)
+        config = {
+            "rewrite": {
+                "enabled": True,
+                "fallback": "original",
+                "summary": {"enabled": True, "trigger_chars": 20, "target_chars": 35, "max_chars": 40},
+            },
+        }
+
+        with patch("irodori_tts_config.provider_config", return_value=config), \
+             patch.dict(sys.modules, {"agent": agent, "agent.auxiliary_client": auxiliary}):
+            result = rewrite_preview("最初の重要な説明です。次の詳細説明です。さらに長い補足説明が続きます。" * 3)
+
+        self.assertEqual(result["rewrite"]["error"], "offline")
+        self.assertLessEqual(len(result["speech_text"]), 40)
+        self.assertNotEqual(result["speech_text"], result["input"])
+
+    def test_long_preview_without_llm_does_not_claim_summary_was_applied(self):
+        config = {"rewrite": {"enabled": True, "summary": {"enabled": True, "trigger_chars": 20}}}
+        with patch("irodori_tts_config.provider_config", return_value=config):
+            result = rewrite_preview("長い回答です。" * 10, call_llm=False)
+        self.assertFalse(result["rewrite"]["summary_applied"])
 
     def test_synthesize_text_sends_provider_irodori_options(self):
         config = {

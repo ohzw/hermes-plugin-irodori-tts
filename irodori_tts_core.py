@@ -51,6 +51,10 @@ def rewrite_preview(
         "model": meta.get("model"),
         "error": meta.get("error"),
         "elapsed_ms": int(meta.get("elapsed_ms") or 0),
+        "summary_enabled": bool(meta.get("summary_enabled")),
+        "summary_applied": bool(meta.get("summary_applied")),
+        "summary_target_chars": meta.get("summary_target_chars"),
+        "summary_max_chars": meta.get("summary_max_chars"),
     }
     return {
         "input": text,

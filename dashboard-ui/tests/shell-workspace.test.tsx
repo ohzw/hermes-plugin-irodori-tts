@@ -60,11 +60,16 @@ describe('redesigned app shell and workspace', () => {
       const url = String(input);
       const config = {
         revision: 'r1',
-        values: {'rewrite.enabled': true, 'rewrite.model': 'configured-model', 'rewrite.fallback': 'original'},
+        values: {'rewrite.enabled': true, 'rewrite.model': 'configured-model', 'rewrite.fallback': 'original', 'rewrite.summary.enabled': true, 'rewrite.summary.trigger_chars': 1200, 'rewrite.summary.target_chars': 350, 'rewrite.summary.max_chars': 400, 'rewrite.summary.max_input_chars': 16000},
         schema: {fields: {
           'rewrite.enabled': {label: 'テキスト Rewrite', type: 'boolean'},
           'rewrite.model': {label: 'Rewrite モデル', type: 'string'},
           'rewrite.fallback': {label: 'Rewrite 失敗時', type: 'string', enum: ['original', 'empty', 'error']},
+          'rewrite.summary.enabled': {label: '長文の要約', type: 'boolean'},
+          'rewrite.summary.trigger_chars': {label: '要約を開始する文字数', type: 'integer'},
+          'rewrite.summary.target_chars': {label: '要約の目標文字数', type: 'integer'},
+          'rewrite.summary.max_chars': {label: '要約の最大文字数', type: 'integer'},
+          'rewrite.summary.max_input_chars': {label: '要約へ渡す最大文字数', type: 'integer'},
         }},
       };
       if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: []}));
@@ -82,8 +87,10 @@ describe('redesigned app shell and workspace', () => {
     fireEvent.click(screen.getByRole('tab', {name: 'Advanced'}));
 
     expect(screen.getByRole('checkbox', {name: 'テキスト Rewrite'})).toBeChecked();
+    expect(screen.getByRole('checkbox', {name: '長文の要約'})).toBeChecked();
     expect(screen.getByRole('textbox', {name: 'Rewrite モデル'})).toHaveValue('configured-model');
     expect(screen.getByRole('combobox', {name: 'Rewrite 失敗時'})).toHaveValue('original');
+    expect(screen.getByRole('spinbutton', {name: '要約の目標文字数'})).toHaveValue(350);
 
     fireEvent.change(screen.getByRole('textbox', {name: 'Rewrite モデル'}), {target: {value: 'updated-model'}});
     fireEvent.click(screen.getByRole('button', {name: 'Save revision'}));

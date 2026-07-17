@@ -34,6 +34,11 @@ FIELD_SCHEMA = {
     "rewrite.enabled": {"path": "rewrite.enabled", "label": "テキスト Rewrite", "description": "生成前に発音しやすい文章へ変換します。", "type": "boolean", "apply": "next_request"},
     "rewrite.model": {"path": "rewrite.model", "label": "Rewrite モデル", "description": "文章変換に使うモデル名。", "type": "string", "max_length": 200, "apply": "next_request"},
     "rewrite.fallback": {"path": "rewrite.fallback", "label": "Rewrite 失敗時", "description": "Rewrite に失敗した場合の処理。", "type": "string", "max_length": 32, "enum": ["original", "empty", "error"], "apply": "next_request"},
+    "rewrite.summary.enabled": {"path": "rewrite.summary.enabled", "label": "長文の要約", "description": "長い回答を読み上げ前に短く要約します。", "type": "boolean", "default": True, "apply": "next_request"},
+    "rewrite.summary.trigger_chars": {"path": "rewrite.summary.trigger_chars", "label": "要約を開始する文字数", "description": "入力がこの文字数以上の場合に要約します。", "type": "integer", "minimum": 1, "maximum": 100000, "default": 1200, "apply": "next_request"},
+    "rewrite.summary.target_chars": {"path": "rewrite.summary.target_chars", "label": "要約の目標文字数", "description": "読み上げ文の目安となる文字数。", "type": "integer", "minimum": 1, "maximum": 4000, "default": 350, "apply": "next_request"},
+    "rewrite.summary.max_chars": {"path": "rewrite.summary.max_chars", "label": "要約の最大文字数", "description": "読み上げ文が超えない最大文字数。", "type": "integer", "minimum": 1, "maximum": 4000, "default": 400, "apply": "next_request"},
+    "rewrite.summary.max_input_chars": {"path": "rewrite.summary.max_input_chars", "label": "要約へ渡す最大文字数", "description": "長文要約モデルへ渡す入力の上限。", "type": "integer", "minimum": 1, "maximum": 100000, "default": 16000, "apply": "next_request"},
     "pronunciation_dictionary.enabled": {"path": "pronunciation_dictionary.enabled", "label": "発音辞書", "description": "登録した読み方を適用します。", "type": "boolean", "apply": "next_request"},
     "pronunciation_dictionary.max_prompt_entries": {"path": "pronunciation_dictionary.max_prompt_entries", "label": "辞書の最大適用数", "description": "Rewrite に渡す辞書項目の最大数。", "type": "integer", "minimum": 0, "maximum": 1000, "apply": "next_request"},
 }
@@ -125,7 +130,10 @@ def _set(provider: dict[str, Any], key: str, value: Any) -> None:
 
 def read_values(root: dict[str, Any]) -> dict[str, Any]:
     provider = _provider(root)
-    values = {key: _get(provider, meta["path"]) for key, meta in FIELD_SCHEMA.items()}
+    values = {}
+    for key, meta in FIELD_SCHEMA.items():
+        value = _get(provider, meta["path"])
+        values[key] = meta.get("default") if value is None and "default" in meta else value
     if "ref_embed" in values:
         values["ref_embed"] = _voice_asset_id(values["ref_embed"], provider, _config.hermes_home())
     return values
@@ -272,6 +280,16 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
                 _issue(result["errors"], key, "Value is outside the allowed range.")
         if "enum" in meta and value not in meta["enum"]:
             _issue(result["errors"], key, "Value is not an allowed option.")
+    target_chars = values.get("rewrite.summary.target_chars")
+    max_chars = values.get("rewrite.summary.max_chars")
+    if (
+        isinstance(target_chars, int)
+        and not isinstance(target_chars, bool)
+        and isinstance(max_chars, int)
+        and not isinstance(max_chars, bool)
+        and max_chars < target_chars
+    ):
+        _issue(result["errors"], "rewrite.summary.max_chars", "Maximum characters must be at least the target characters.")
     return result
 
 

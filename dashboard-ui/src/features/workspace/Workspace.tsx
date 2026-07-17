@@ -14,7 +14,7 @@ const basicGroups: SettingGroup[] = [{title: 'Generation basics', keys: ['captio
 const advancedGroups: SettingGroup[] = [
   {title: 'Quality and speed', keys: ['num_steps', 't_schedule_mode', 'sway_coeff', 'cfg_scale_text', 'cfg_scale_caption', 'cfg_scale_speaker']},
   {title: 'Long-form processing', keys: ['chunking_enabled', 'chunk_min_chars', 'first_sentence_chunk_min_chars']},
-  {title: 'Pronunciation and rewrite', keys: ['rewrite.enabled', 'rewrite.model', 'rewrite.fallback', 'pronunciation_dictionary.enabled', 'pronunciation_dictionary.max_prompt_entries']},
+  {title: 'Pronunciation and rewrite', keys: ['rewrite.enabled', 'rewrite.model', 'rewrite.fallback', 'rewrite.summary.enabled', 'rewrite.summary.trigger_chars', 'rewrite.summary.target_chars', 'rewrite.summary.max_chars', 'rewrite.summary.max_input_chars', 'pronunciation_dictionary.enabled', 'pronunciation_dictionary.max_prompt_entries']},
 ];
 
 function configValue(values: Record<string, unknown>, key: string): unknown {

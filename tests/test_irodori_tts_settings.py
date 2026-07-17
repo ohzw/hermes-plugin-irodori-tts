@@ -39,6 +39,60 @@ class SettingsTests(unittest.TestCase):
         fields = {item["field"] for item in result["errors"]}
         self.assertEqual(fields, {"num_steps", "seed", "t_schedule_mode", "caption", "chunking_enabled"})
 
+    def test_spoken_summary_policy_is_editable_and_validated(self):
+        fields = settings.schema()["fields"]
+        self.assertEqual(fields["rewrite.summary.enabled"]["apply_scope"], "next_request")
+        self.assertEqual(fields["rewrite.summary.trigger_chars"]["minimum"], 1)
+        self.assertEqual(fields["rewrite.summary.target_chars"]["maximum"], 4000)
+
+        invalid = settings.validate_values({
+            "rewrite.summary.enabled": "true",
+            "rewrite.summary.trigger_chars": 0,
+            "rewrite.summary.target_chars": 4001,
+            "rewrite.summary.max_chars": 0,
+            "rewrite.summary.max_input_chars": 0,
+        })
+        self.assertEqual(
+            {item["field"] for item in invalid["errors"]},
+            {
+                "rewrite.summary.enabled",
+                "rewrite.summary.trigger_chars",
+                "rewrite.summary.target_chars",
+                "rewrite.summary.max_chars",
+                "rewrite.summary.max_input_chars",
+            },
+        )
+        inconsistent = settings.validate_values({
+            "rewrite.summary.target_chars": 500,
+            "rewrite.summary.max_chars": 400,
+        })
+        self.assertEqual(
+            {item["field"] for item in inconsistent["errors"]},
+            {"rewrite.summary.max_chars"},
+        )
+
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            self._config(home, "tts:\n  providers:\n    irodori-local:\n      rewrite:\n        enabled: true\n")
+            store = settings.ConfigStore()
+            defaults = store.read_values()
+            self.assertTrue(defaults["rewrite.summary.enabled"])
+            self.assertEqual(defaults["rewrite.summary.trigger_chars"], 1200)
+            self.assertEqual(defaults["rewrite.summary.target_chars"], 350)
+            self.assertEqual(defaults["rewrite.summary.max_chars"], 400)
+            self.assertEqual(defaults["rewrite.summary.max_input_chars"], 16000)
+            result = store.update({
+                "rewrite.summary.enabled": True,
+                "rewrite.summary.trigger_chars": 1200,
+                "rewrite.summary.target_chars": 350,
+                "rewrite.summary.max_chars": 400,
+                "rewrite.summary.max_input_chars": 16000,
+            })
+            values = store.read_values()
+
+        self.assertTrue(result["saved"])
+        self.assertTrue(values["rewrite.summary.enabled"])
+        self.assertEqual(values["rewrite.summary.target_chars"], 350)
+
     def test_known_voice_asset_is_allowed_but_arbitrary_path_is_not(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
             voices = Path(home, "voices")

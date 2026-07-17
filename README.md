@@ -6,7 +6,7 @@ It provides:
 
 - a native `irodori-local` Python TTS provider for Hermes
 - automatic Irodori server health checks, startup, retry, and restart handling
-- configurable rewrite prompts and pronunciation dictionary support
+- adaptive long-response summarization, configurable rewrite prompts, and pronunciation dictionary support
 - bounded request/audio history and diagnostics
 - a standalone Irodori dashboard plus a lightweight launcher in the Hermes dashboard
 - `hermes irodori setup`, `status`, and `dashboard` commands
@@ -71,6 +71,8 @@ hermes irodori status
 ```
 
 A complete non-personal configuration example is available at [`examples/config.example.yaml`](examples/config.example.yaml).
+
+When Rewrite is enabled, responses shorter than 1,200 characters keep the normal speech-oriented rewrite. Longer responses are summarized and rewritten in one LLM call, targeting about 350 Japanese characters with a 400-character hard limit. These defaults can be changed under `tts.providers.irodori-local.rewrite.summary`; only the hidden spoken script is shortened, while the visible Hermes response remains unchanged.
 
 ### Important configuration rule
 

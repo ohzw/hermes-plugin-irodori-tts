@@ -154,6 +154,11 @@ Rules:
 - Output only the rewritten speech script. No preface, no notes, no Markdown fence.
 """
 
+_DEFAULT_SUMMARY_TRIGGER_CHARS = 1200
+_DEFAULT_SUMMARY_TARGET_CHARS = 350
+_DEFAULT_SUMMARY_MAX_CHARS = 400
+_DEFAULT_SUMMARY_MAX_INPUT_CHARS = 16000
+
 
 def _get_nested(data: dict, *keys: str) -> dict:
     cur = data
@@ -183,6 +188,51 @@ def _render_rewrite_prompt(rewrite_cfg: dict) -> str:
                 return text
     prompt = str(rewrite_cfg.get("prompt") or "").strip()
     return prompt or _DEFAULT_REWRITE_PROMPT
+
+
+def _summary_policy(rewrite_cfg: dict, text: str) -> dict:
+    summary_cfg = rewrite_cfg.get("summary") or {}
+    if not isinstance(summary_cfg, dict):
+        summary_cfg = {}
+    enabled = _coerce_bool(summary_cfg.get("enabled"), True)
+    trigger_chars = _optional_int(summary_cfg.get("trigger_chars")) or _DEFAULT_SUMMARY_TRIGGER_CHARS
+    target_chars = max(1, _optional_int(summary_cfg.get("target_chars")) or _DEFAULT_SUMMARY_TARGET_CHARS)
+    max_chars = max(target_chars, _optional_int(summary_cfg.get("max_chars")) or _DEFAULT_SUMMARY_MAX_CHARS)
+    max_input_chars = max(1, _optional_int(summary_cfg.get("max_input_chars")) or _DEFAULT_SUMMARY_MAX_INPUT_CHARS)
+    return {
+        "enabled": enabled,
+        "applied": enabled and len(text) >= max(1, trigger_chars),
+        "trigger_chars": max(1, trigger_chars),
+        "target_chars": target_chars,
+        "max_chars": max_chars,
+        "max_input_chars": max_input_chars,
+    }
+
+
+def _summary_prompt_block(policy: dict) -> str:
+    target = policy["target_chars"]
+    maximum = policy["max_chars"]
+    lower = max(1, target - 50)
+    return f"""
+
+長文の読み上げ要約モード:
+- 読み上げ向けに整える前に、回答全体を要約してください。この指示は、すべての詳細を保持する指示より優先します。
+- 約{target}文字を目安とし、{lower}〜{maximum}文字に収め、{maximum}文字を絶対に超えないでください。
+- 結論を最初に述べ、その後は最も重要なポイントだけを続けてください。
+- 元の回答に重大な警告や次の行動がある場合だけ、それらを残してください。
+- 実装の細部、重複説明、網羅的な一覧、コード、ログ、付随的なメタデータは省略してください。
+- 単独で意味が通る自然な読み上げ文にしてください。要約したことや詳細を省略したことには言及しないでください。
+"""
+
+
+def _truncate_spoken_text(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    candidate = text[:limit]
+    sentence_end = max(candidate.rfind(mark) for mark in ("。", "！", "？", "!", "?"))
+    if sentence_end >= limit // 2:
+        return candidate[: sentence_end + 1].rstrip()
+    return candidate[:-1].rstrip() + "…"
 
 
 def _pronunciation_dictionary_config(provider_cfg: dict) -> dict:
@@ -308,8 +358,18 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
     dict_entries = _select_dictionary_entries(provider_cfg, text)
     apply_dict_to_prompt = _coerce_bool(dict_cfg.get("apply_to_prompt"), True)
     apply_dict_post = _coerce_bool(dict_cfg.get("apply_post_rewrite"), True)
+    rewrite_enabled = bool(isinstance(rewrite_cfg, dict) and _coerce_bool(rewrite_cfg.get("enabled"), False))
+    summary_policy = _summary_policy(rewrite_cfg, text) if isinstance(rewrite_cfg, dict) else {
+        "enabled": False,
+        "applied": False,
+        "trigger_chars": _DEFAULT_SUMMARY_TRIGGER_CHARS,
+        "target_chars": _DEFAULT_SUMMARY_TARGET_CHARS,
+        "max_chars": _DEFAULT_SUMMARY_MAX_CHARS,
+        "max_input_chars": _DEFAULT_SUMMARY_MAX_INPUT_CHARS,
+    }
+    summary_policy["applied"] = bool(summary_policy["applied"] and rewrite_enabled)
     meta = {
-        "enabled": bool(isinstance(rewrite_cfg, dict) and _coerce_bool(rewrite_cfg.get("enabled"), False)),
+        "enabled": rewrite_enabled,
         "provider": rewrite_cfg.get("provider") if isinstance(rewrite_cfg, dict) else None,
         "model": rewrite_cfg.get("model") if isinstance(rewrite_cfg, dict) else None,
         "task": rewrite_cfg.get("task") if isinstance(rewrite_cfg, dict) else None,
@@ -319,6 +379,11 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
         "dictionary_entries": len(dict_entries),
         "dictionary_selected": dict_entries,
         "dictionary_applied": [],
+        "summary_enabled": summary_policy["enabled"],
+        "summary_applied": summary_policy["applied"],
+        "summary_trigger_chars": summary_policy["trigger_chars"],
+        "summary_target_chars": summary_policy["target_chars"],
+        "summary_max_chars": summary_policy["max_chars"],
     }
     t0 = time.perf_counter()
     try:
@@ -338,6 +403,8 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
         max_output_chars = _optional_int(rewrite_cfg.get("max_output_chars")) or max_input_chars
         fallback = str(rewrite_cfg.get("fallback") or "original").strip().lower()
         prompt = _render_rewrite_prompt(rewrite_cfg)
+        if summary_policy["applied"]:
+            prompt += _summary_prompt_block(summary_policy)
         if apply_dict_to_prompt and dict_entries:
             prompt += _dictionary_prompt_block(dict_entries)
         task = str(rewrite_cfg.get("task") or "tts_script_rewrite")
@@ -360,9 +427,10 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
         try:
             from agent.auxiliary_client import call_llm, extract_content_or_reasoning
 
+            input_limit = summary_policy["max_input_chars"] if summary_policy["applied"] else max_input_chars
             messages = [
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": original[:max_input_chars]},
+                {"role": "user", "content": original[:input_limit]},
             ]
             response = call_llm(
                 task=task,
@@ -383,8 +451,10 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
             dictionary_applied: list[dict] = []
             if apply_dict_post and dict_entries:
                 rewritten, dictionary_applied = _apply_pronunciation_dictionary(rewritten, dict_entries)
+            if summary_policy["applied"]:
+                rewritten = _truncate_spoken_text(rewritten, summary_policy["max_chars"])
             if len(rewritten) > max_output_chars:
-                rewritten = rewritten[:max_output_chars].rstrip()
+                rewritten = _truncate_spoken_text(rewritten, max_output_chars)
             changed = rewritten != original
             meta.update({
                 "changed": changed,
@@ -408,6 +478,8 @@ def _rewrite_text_if_enabled(text: str, provider_cfg: dict) -> tuple[str, dict]:
             dictionary_applied: list[dict] = []
             if apply_dict_post and dict_entries:
                 fallback_text, dictionary_applied = _apply_pronunciation_dictionary(fallback_text, dict_entries)
+            if summary_policy["applied"]:
+                fallback_text = _truncate_spoken_text(fallback_text, summary_policy["max_chars"])
             meta.update({"changed": fallback_text != original, "dictionary_applied": dictionary_applied})
             return fallback_text, {**meta, "speech_chars": len(fallback_text), "elapsed_ms": round((time.perf_counter() - t0) * 1000)}
     except Exception:

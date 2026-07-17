@@ -13,6 +13,14 @@ tts:
       caption: ""
       num_steps: 8
       t_schedule_mode: sway
+      rewrite:
+        enabled: true
+        summary:
+          enabled: true
+          trigger_chars: 1200
+          target_chars: 350
+          max_chars: 400
+          max_input_chars: 16000
       pronunciation_dictionary:
         enabled: false
       dashboard:
