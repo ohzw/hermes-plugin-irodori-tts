@@ -37,34 +37,39 @@ describe('Overview timing chart', () => {
     expect(screen.queryByTestId('bar-chart-root')).not.toBeInTheDocument();
   });
 
-  it('renders a grouped bar chart once two timing samples are available', () => {
+  it('renders a semantic timing stack once two samples are available', () => {
     render(<Overview status={{recent: [
       {request_id: 'latest', ts: '2026-07-11T15:00:00Z', timing_ms: {rewrite: 200, irodori_request: 900, total: 1200}},
       {request_id: 'previous', ts: '2026-07-10T15:00:00Z', timing_ms: {rewrite: 100, irodori_request: 800, total: 1000}},
     ]}} />);
 
     expect(screen.getByTestId('bar-chart-root')).toBeInTheDocument();
-    expect(screen.getByTestId('bar-total')).toHaveAttribute('data-variant', 'gradient');
-    expect(screen.getByTestId('bar-irodori')).toHaveAttribute('data-variant', 'dotted');
-    expect(screen.getByTestId('bar-rewrite')).toHaveAttribute('data-variant', 'hatched');
-    expect(chartProps.current?.stackType).toBe('default');
+    expect(screen.queryByTestId('bar-total')).not.toBeInTheDocument();
+    expect(screen.getByTestId('bar-rewrite')).toHaveAttribute('data-variant', 'dotted');
+    expect(screen.getByTestId('bar-irodori')).toHaveAttribute('data-variant', 'gradient');
+    expect(screen.getByTestId('bar-other')).toHaveAttribute('data-variant', 'hatched');
+    expect(chartProps.current?.stackType).toBe('stacked');
+    expect(screen.getByText('stack height = Total')).toBeInTheDocument();
   });
 
   it('uses distinct bar variants and orders samples oldest to newest', () => {
     render(<Overview status={{recent: [
-      {request_id: 'new', ts: '2026-07-11T15:00:00Z', timing_ms: {rewrite: 2, irodori_request: 18, total: 20}},
-      {request_id: 'middle', ts: '2026-07-10T18:00:00Z', timing_ms: {rewrite: 1.5, irodori_request: 13, total: 15}},
-      {request_id: 'old', ts: '2026-07-10T15:00:00Z', timing_ms: {rewrite: 1, irodori_request: 9, total: 10}},
+      {request_id: 'new', ts: '2026-07-11T15:00:00Z', timing_ms: {rewrite: 2, irodori_request: 18, total: 25}},
+      {request_id: 'middle', ts: '2026-07-10T18:00:00Z', timing_ms: {rewrite: 1.5, irodori_request: 13, total: 20}},
+      {request_id: 'old', ts: '2026-07-10T15:00:00Z', timing_ms: {rewrite: 1, irodori_request: 9, total: 12}},
     ]}} />);
 
-    expect(screen.getByTestId('bar-total')).toHaveAttribute('data-variant', 'gradient');
-    expect(screen.getByTestId('bar-irodori')).toHaveAttribute('data-variant', 'dotted');
-    expect(screen.getByTestId('bar-rewrite')).toHaveAttribute('data-variant', 'hatched');
+    expect(screen.getByTestId('bar-rewrite')).toHaveAttribute('data-variant', 'dotted');
+    expect(screen.getByTestId('bar-irodori')).toHaveAttribute('data-variant', 'gradient');
+    expect(screen.getByTestId('bar-other')).toHaveAttribute('data-variant', 'hatched');
     expect(screen.getByTestId('bar-irodori')).toHaveAttribute('data-stroke', 'solid');
-    expect(screen.getByTestId('bar-rewrite')).toHaveAttribute('data-stroke', 'dashed');
+    expect(screen.getByTestId('bar-other')).toHaveAttribute('data-stroke', 'dashed');
     expect(chartProps.current?.bloom).toBe('low');
-    expect((chartProps.current?.config as Record<string, {color: string}>).total.color).toBe('blue');
-    expect((chartProps.current?.config as Record<string, {color: string}>).irodori.color).toBe('purple');
-    expect((chartProps.current?.data as Array<{total: number}>).map(item => item.total)).toEqual([10, 15, 20]);
+    const config = chartProps.current?.config as Record<string, {color: string}>;
+    expect(config.rewrite.color).toBe('purple');
+    expect(config.irodori.color).toBe('blue');
+    expect(config.other.color).toBe('grey');
+    expect((chartProps.current?.data as Array<{total: number}>).map(item => item.total)).toEqual([12, 20, 25]);
+    expect((chartProps.current?.data as Array<{other: number}>).map(item => item.other)).toEqual([2, 5.5, 5]);
   });
 });
