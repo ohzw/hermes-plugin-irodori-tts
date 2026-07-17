@@ -135,7 +135,10 @@ export default function App() {
           title={`${connection}${lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}`}
         >
           <Badge className={status.health?.ok ? 'badge-online' : 'badge-offline'}><span className="status-dot" />{status.health?.ok ? 'Service online' : 'Service unavailable'}</Badge>
-          <span className="connection-label">{connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Polling'}</span>
+          <span className="connection-label">
+            {connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Reconnecting · 5s fallback'}
+            {lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}
+          </span>
         </div>
       </header>
       <div className="shell-main">

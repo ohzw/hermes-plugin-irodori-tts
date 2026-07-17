@@ -1,4 +1,4 @@
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import App from '../src/App';
 
@@ -33,9 +33,10 @@ describe('redesigned app shell and workspace', () => {
 
   it('uses the approved top navigation shell instead of a vertical sidebar', async () => {
     await renderLoadedApp();
-    expect(document.querySelector('.shell-topbar')).toBeInTheDocument();
-    expect(document.querySelector('.shell-sidebar')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', {name: 'Workspace'})).toHaveAttribute('aria-current', 'page');
+    const topbar = screen.getByRole('banner');
+    const navigation = within(topbar).getByRole('navigation', {name: 'Main navigation'});
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    expect(within(navigation).getByRole('link', {name: 'Workspace'})).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows Basic and Advanced settings tabs beside a single Playground', async () => {
