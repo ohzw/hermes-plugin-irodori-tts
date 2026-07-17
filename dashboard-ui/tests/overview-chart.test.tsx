@@ -46,6 +46,7 @@ describe('Overview timing chart', () => {
 
     expect(screen.getByTestId('chart-root')).toBeInTheDocument();
     expect(screen.getByTestId('line-total')).toHaveAttribute('data-stroke', 'solid');
+    expect(screen.getByTestId('line-total')).toHaveAttribute('data-variant', 'gradient');
     expect(screen.queryByTestId('area-total')).not.toBeInTheDocument();
   });
 
@@ -57,6 +58,8 @@ describe('Overview timing chart', () => {
     ]}} />);
 
     expect(screen.getByTestId('area-total')).toHaveAttribute('data-variant', 'gradient');
+    expect(screen.getByTestId('line-irodori')).toHaveAttribute('data-variant', 'dotted');
+    expect(screen.getByTestId('line-rewrite')).toHaveAttribute('data-variant', 'hatched');
     expect(screen.getByTestId('line-irodori')).toHaveAttribute('data-stroke', 'solid');
     expect(screen.getByTestId('line-rewrite')).toHaveAttribute('data-stroke', 'dashed');
     expect(screen.queryByTestId('area-irodori')).not.toBeInTheDocument();
