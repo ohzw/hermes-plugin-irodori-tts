@@ -3,6 +3,7 @@ import type {FormEvent} from 'react';
 import {api, type ConfigPayload, type FieldMeta} from '../../shared/api';
 import {Button, Card, CardContent, CardHeader, Input, Select, Switch, Tabs, TabsList, TabsTrigger, Textarea} from '../../components/ui';
 import {Sparkline} from '@/components/dither-kit/sparkline';
+import {DitherGradient} from '@/components/dither-kit/gradient';
 import {Playground} from './Playground';
 
 type VoiceAsset = {id: string; label: string};
@@ -175,18 +176,29 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
     catch (error) { setErrors([error instanceof Error ? error.message : 'Unable to save settings']); setStatus('Save failed'); }
   };
   const groups = activeTab === 'basic' ? basicGroups : advancedGroups;
+  const latestLatency = activity.at(-1);
+  const hasLatencyTrend = activity.length >= 3;
   return <section className="workspace-page">
     <div className="workspace-hero">
       <div className="page-heading"><div><div className="eyebrow">WORKSPACE</div><h2>Voice workspace</h2><p>Shape a voice, then test it against real text.</p></div></div>
-      <div className="dither-activity" data-testid="dither-activity" aria-hidden="true">
-        <Sparkline
-          data={activity.length > 1 ? activity : [8, 18, 12, 31, 20, 44, 28, 52, 34, 61]}
-          color="blue"
-          variant="dotted"
-          bloom="aura"
-          animate
-          className="dither-activity-chart"
-        />
+      <div className="workspace-telemetry" aria-label="Recent total latency">
+        <DitherGradient from="blue" direction="left" cell={4} opacity={0.12} bloom="off" className="workspace-gradient" />
+        <div className="workspace-telemetry-copy">
+          <span className="metric-label">Recent total latency</span>
+          {latestLatency == null
+            ? <strong className="telemetry-empty">No timing samples yet</strong>
+            : <><strong className="telemetry-value">{latestLatency >= 1000 ? `${(latestLatency / 1000).toFixed(2)}s` : `${Math.round(latestLatency)}ms`}</strong><span className="metric-note">{activity.length} recent {activity.length === 1 ? 'sample' : 'samples'}</span></>}
+        </div>
+        {hasLatencyTrend && <div className="dither-activity" data-testid="dither-activity" aria-hidden="true">
+          <Sparkline
+            data={activity}
+            color="blue"
+            variant="gradient"
+            bloom="off"
+            animate={false}
+            className="dither-activity-chart"
+          />
+        </div>}
       </div>
     </div>
     <div className="workspace-layout">

@@ -70,12 +70,21 @@ describe('dashboard state preservation', () => {
     act(() => source.emit('status', {
       now: 'later',
       health: {ok: true},
-      recent: [{request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}}, ...serverRequests],
+      recent: [
+        {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {}},
+        {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}},
+        ...serverRequests,
+      ],
     }));
-    expect(chartProps.current?.data).toHaveLength(2);
+    expect(chartProps.current?.data).toHaveLength(3);
   });
 
   it('keeps the overview entrance animation from replaying when live data changes', async () => {
+    serverRequests = [
+      {request_id: 'three', status: 'ok', original_text: 'third', timing_ms: {}},
+      {request_id: 'two', status: 'ok', original_text: 'second', timing_ms: {}},
+      ...serverRequests,
+    ];
     await renderWithInitialLoad();
 
     expect(chartProps.current?.replayOnDataChange).toBe(false);

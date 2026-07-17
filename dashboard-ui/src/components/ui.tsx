@@ -6,6 +6,7 @@ import type {
   TextareaHTMLAttributes,
 } from 'react';
 import {cn} from '../lib/utils';
+import {DitherButton} from './dither-kit/button';
 
 type ButtonVariant = 'default' | 'outline' | 'ghost' | 'destructive';
 
@@ -13,7 +14,18 @@ export function Button({
   className,
   variant = 'default',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {variant?: ButtonVariant}) {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'color'> & {variant?: ButtonVariant}) {
+  if (variant === 'default') {
+    return (
+      <DitherButton
+        className={cn('ui-button', 'ui-button-default', className)}
+        color="blue"
+        variant="gradient"
+        bloom="off"
+        {...props}
+      />
+    );
+  }
   return (
     <button
       className={cn('ui-button', `ui-button-${variant}`, className)}

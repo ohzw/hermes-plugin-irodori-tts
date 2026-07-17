@@ -44,11 +44,14 @@ describe('redesigned app shell and workspace', () => {
     expect(screen.getByRole('tab', {name: 'Basic'})).toBeInTheDocument();
     expect(screen.getByRole('tab', {name: 'Advanced'})).toBeInTheDocument();
     expect(screen.getAllByRole('heading', {name: 'Playground'})).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'Generate TTS'}).querySelector('canvas')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Preview'}).querySelector('canvas')).not.toBeInTheDocument();
   });
 
-  it('uses the installed Dither Kit for the workspace atmosphere', async () => {
+  it('does not invent decorative timing data when the workspace has no samples', async () => {
     await renderLoadedApp();
-    expect(screen.getByTestId('dither-activity')).toBeInTheDocument();
+    expect(screen.getByText('No timing samples yet')).toBeInTheDocument();
+    expect(screen.queryByTestId('dither-activity')).not.toBeInTheDocument();
   });
 
   it('reads and writes dotted configuration keys without nesting them', async () => {
