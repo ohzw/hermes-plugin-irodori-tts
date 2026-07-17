@@ -103,6 +103,75 @@ class SettingsTests(unittest.TestCase):
             self.assertFalse(settings.validate_values({"ref_embed": "/tmp/not-allowed"}, provider=provider, home=Path(home))["errors"] == [])
             self.assertFalse(settings.validate_values({"ref_embed": "alto.safetensors"}, provider=provider, home=Path(home))["errors"])
 
+    def test_reference_audio_and_speaker_embedding_require_matching_asset_types(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "voices")
+            voices.mkdir()
+            (voices / "sample.wav").write_bytes(b"audio")
+            (voices / "speaker.safetensors").write_bytes(b"embed")
+            provider = {"voices_dir": str(voices)}
+
+            fields = settings.schema()["fields"]
+            self.assertEqual(fields["ref_wav"]["type"], "reference_audio")
+            self.assertEqual(fields["ref_embed"]["type"], "speaker_embedding")
+            self.assertFalse(settings.validate_values({"ref_wav": "sample.wav"}, provider=provider, home=Path(home))["errors"])
+            self.assertFalse(settings.validate_values({"ref_embed": "speaker.safetensors"}, provider=provider, home=Path(home))["errors"])
+            self.assertFalse(settings.validate_values({"ref_wav": None, "ref_embed": None}, provider=provider, home=Path(home))["errors"])
+            self.assertEqual(
+                {item["field"] for item in settings.validate_values(
+                    {"ref_wav": "speaker.safetensors", "ref_embed": "sample.wav"},
+                    provider=provider,
+                    home=Path(home),
+                )["errors"]},
+                {"ref_wav", "ref_embed"},
+            )
+
+    def test_import_voice_asset_copies_a_safe_file_into_the_configured_voices_directory(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "managed-voices")
+            provider = {"voices_dir": str(voices)}
+
+            wav = b"RIFF\x04\x00\x00\x00WAVE"
+            imported = settings.import_voice_asset("my voice.wav", wav, "reference_audio", provider=provider, home=Path(home))
+
+            self.assertEqual(imported["id"], "my voice.wav")
+            self.assertEqual(imported["type"], "wav")
+            self.assertEqual((voices / "my voice.wav").read_bytes(), wav)
+
+            duplicate = settings.import_voice_asset("my voice.wav", wav + b"2", "reference_audio", provider=provider, home=Path(home))
+            self.assertEqual(duplicate["id"], "my voice-2.wav")
+            self.assertEqual((voices / "my voice-2.wav").read_bytes(), wav + b"2")
+
+            with self.assertRaises(settings.VoiceAssetImportError):
+                settings.import_voice_asset("../outside.wav", b"bad", "reference_audio", provider=provider, home=Path(home))
+            with self.assertRaises(settings.VoiceAssetImportError):
+                settings.import_voice_asset("wrong.safetensors", b"bad", "reference_audio", provider=provider, home=Path(home))
+            with self.assertRaises(settings.VoiceAssetImportError):
+                settings.import_voice_asset("disguised.wav", b"not-wave-data", "reference_audio", provider=provider, home=Path(home))
+
+            header = b"{}"
+            safetensors = len(header).to_bytes(8, "little") + header
+            embedding = settings.import_voice_asset(
+                "speaker.safetensors", safetensors, "speaker_embedding", provider=provider, home=Path(home)
+            )
+            self.assertEqual(embedding["id"], "speaker.safetensors")
+
+    def test_unchanged_legacy_voice_value_does_not_block_other_setting_updates(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "voices")
+            voices.mkdir()
+            legacy = voices / "legacy.wav"
+            legacy.write_bytes(b"RIFF\x04\x00\x00\x00WAVE")
+            self._config(home, f"tts:\n  providers:\n    irodori-local:\n      voices_dir: {voices}\n      ref_embed: {legacy}\n      caption: old\n")
+            store = settings.ConfigStore()
+            values = store.read_values()
+            values["caption"] = "new"
+
+            result = store.update(values)
+
+            self.assertTrue(result["saved"])
+            self.assertEqual(store.read_values()["caption"], "new")
+
     def test_voice_asset_id_is_public_but_config_keeps_resolved_path(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
             voices = Path(home, "voices")

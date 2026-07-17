@@ -6,6 +6,7 @@ import {History} from './features/history';
 import {Dictionary} from './features/dictionary';
 import {Diagnostics} from './features/diagnostics';
 import {Badge} from './components/ui';
+import {BrandMascot} from './components/BrandMascot';
 import {
   canonicalPath,
   destinationFromPath,
@@ -128,7 +129,7 @@ export default function App() {
     <div className="irodori-plugin-root app-shell">
       <header className="shell-topbar">
         <div className="shell-brand">
-          <div className="brand-glyph" aria-hidden="true">I</div>
+          <div className="brand-glyph" aria-hidden="true"><BrandMascot /></div>
           <div><strong>Irodori</strong><div className="eyebrow">LOCAL VOICE STUDIO</div></div>
         </div>
         <Navigation active={tab} />

@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
+import {BrandMascot} from '../components/BrandMascot';
 
 interface DashboardState {
   running: boolean;
@@ -65,7 +66,7 @@ export default function Launcher() {
 
   return (
     <section className="irodori-launcher">
-      <div className="irodori-launcher__mark" aria-hidden="true">I</div>
+      <div className="irodori-launcher__mark" aria-hidden="true"><BrandMascot /></div>
       <div className="irodori-launcher__content">
         <div className="irodori-launcher__eyebrow">LOCAL VOICE DASHBOARD</div>
         <h2>Irodori TTS</h2>

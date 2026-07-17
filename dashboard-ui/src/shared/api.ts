@@ -4,6 +4,7 @@ export interface AudioRecord { request_id?: string; audio_id?: string; url?: str
 export interface Detail { request_id: string; status?: string; original_text?: string; speech_text?: string; timing_ms?: Timing; attempts?: number; audio?: AudioRecord; audio_id?: string; rewrite?: Record<string, unknown>; dictionary?: Record<string, unknown>; error?: unknown; [key: string]: unknown }
 export interface Status { now?: string; health?: {ok?: boolean; url?: string; latency_ms?: number; error?: string}; recommendation?: string; summary?: Record<string, unknown>; recent?: RequestRecord[]; config?: Record<string, unknown>; latest_debug?: Record<string, unknown>; server_log?: { lines?: string[]; [key: string]: unknown }; [key: string]: unknown }
 export interface FieldMeta { label?: string; type?: string; enum?: string[]; minimum?: number; maximum?: number; max_length?: number; description?: string }
+export interface VoiceAsset { id: string; label: string; type: string }
 export interface ConfigPayload { values?: Record<string, unknown>; schema?: { fields?: Record<string, FieldMeta> }; revision?: string; [key: string]: unknown }
 export interface DictionaryEntry { id?: string; surface: string; reading: string; aliases?: string[]; match?: string; mode?: string; enabled?: boolean; [key: string]: unknown }
 export interface Validation { ok: boolean; errors?: Array<{message?: string; code?: string}>; warnings?: Array<{message?: string; code?: string}>; info?: Array<{message?: string; code?: string}> }
@@ -17,7 +18,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     : undefined;
   const fetchJSON = dashboardWindow?.__HERMES_PLUGIN_SDK__?.fetchJSON;
   if (fetchJSON) return fetchJSON<T>(url, init);
-  const response = await fetch(url, init); const data: unknown = await response.json(); if (!response.ok || (record(data) && data.ok === false)) { const detail = record(data) && record(data.error) ? data.error : {}; const message = typeof detail.message === 'string' ? detail.message : response.statusText || 'API request failed'; const error = new Error(message) as Error & {status?: number; code?: string}; error.status = response.status; if (typeof detail.code === 'string') error.code = detail.code; throw error; } return data as T;
+  const response = await fetch(url, init); const data: unknown = await response.json(); if (!response.ok || (record(data) && data.ok === false)) { const errorDetail = record(data) ? data.error : undefined; const detail = record(errorDetail) ? errorDetail : {}; const fastApiDetail = record(data) ? data.detail : undefined; const message = typeof detail.message === 'string' ? detail.message : typeof fastApiDetail === 'string' ? fastApiDetail : record(fastApiDetail) && typeof fastApiDetail.message === 'string' ? fastApiDetail.message : response.statusText || 'API request failed'; const error = new Error(message) as Error & {status?: number; code?: string}; error.status = response.status; if (typeof detail.code === 'string') error.code = detail.code; throw error; } return data as T;
 }
 async function authenticatedBlob(url: string): Promise<Blob> {
   const dashboardWindow = typeof window !== 'undefined'
@@ -33,7 +34,11 @@ const post = (payload: unknown): RequestInit => ({ method: 'POST', headers: {'Co
 export const api = {
   status: () => request<Status>(apiPath('/status?limit=30')),
   config: () => request<{data: ConfigPayload}>(apiPath('/config')),
-  voiceAssets: () => request<{data: {assets: Array<{id: string; label: string}>}}>(apiPath('/config/voice-assets')),
+  voiceAssets: () => request<{data: {assets: VoiceAsset[]}}>(apiPath('/config/voice-assets')),
+  importVoiceAsset: (file: File, kind: 'reference_audio' | 'speaker_embedding') => request<{data: {asset: VoiceAsset}}>(
+    apiPath(`/config/voice-assets/import?kind=${encodeURIComponent(kind)}&filename=${encodeURIComponent(file.name)}`),
+    {method: 'POST', body: file},
+  ),
   validateConfig: (payload: unknown) => request<{data: ConfigPayload; warnings?: unknown[]}>(apiPath('/config/validate'), post(payload)),
   saveConfig: (payload: unknown) => request<{data: ConfigPayload; warnings?: unknown[]}>(apiPath('/config'), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}),
   dictionary: () => request<{entries: DictionaryEntry[]}>(apiPath('/dictionary')),

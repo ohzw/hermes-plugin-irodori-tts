@@ -22,7 +22,16 @@ def load_api_module():
     return module
 
 
-def make_request(path: str) -> Request:
+def make_request(path: str, *, body: bytes = b"") -> Request:
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if sent:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
     return Request({
         "type": "http",
         "method": "GET",
@@ -32,7 +41,7 @@ def make_request(path: str) -> Request:
         "scheme": "http",
         "server": ("testserver", 80),
         "client": ("testclient", 123),
-    })
+    }, receive)
 
 
 class DashboardPluginTests(unittest.TestCase):
@@ -85,6 +94,46 @@ class DashboardPluginTests(unittest.TestCase):
 
         self.assertEqual("rev-1", result["data"]["revision"])
         self.assertEqual("やさしい声", result["data"]["values"]["caption"])
+
+    def test_config_update_returns_schema_for_the_next_workspace_render(self):
+        api = load_api_module()
+        store = mock.Mock()
+        store.update.return_value = {
+            "saved": True,
+            "values": {"ref_wav": "sample.wav"},
+            "revision": "rev-2",
+            "validation": {"warnings": []},
+        }
+        expected_schema = {"fields": {"ref_wav": {"type": "reference_audio"}}}
+
+        with mock.patch.object(api, "ConfigStore", return_value=store), mock.patch.object(
+            api, "settings_schema", return_value=expected_schema
+        ):
+            result = api._config_update({"revision": "rev-1", "values": {"ref_wav": "sample.wav"}})
+
+        self.assertEqual(result["data"]["schema"], expected_schema)
+
+    def test_voice_asset_import_accepts_raw_file_content_and_returns_the_new_asset(self):
+        api = load_api_module()
+        imported = {"id": "sample.wav", "label": "sample.wav", "type": "wav"}
+        request = make_request("/api/config/voice-assets/import", body=b"wave-data")
+
+        with mock.patch.object(api, "import_voice_asset", return_value=imported) as importer:
+            result = asyncio.run(api.voice_asset_import(request, kind="reference_audio", filename="sample.wav"))
+
+        self.assertEqual(result["data"]["asset"], imported)
+        importer.assert_called_once_with("sample.wav", b"wave-data", "reference_audio")
+
+    def test_voice_asset_import_stops_reading_when_the_limit_is_exceeded(self):
+        api = load_api_module()
+        request = make_request("/api/config/voice-assets/import", body=b"12345")
+
+        with mock.patch.object(api, "_MAX_VOICE_ASSET_BYTES", 4), mock.patch.object(api, "import_voice_asset") as importer:
+            with self.assertRaises(api.HTTPException) as raised:
+                asyncio.run(api.voice_asset_import(request, kind="reference_audio", filename="sample.wav"))
+
+        self.assertEqual(raised.exception.status_code, 413)
+        importer.assert_not_called()
 
     def test_request_detail_rebases_legacy_audio_url_to_plugin_mount(self):
         api = load_api_module()

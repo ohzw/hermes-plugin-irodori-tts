@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,7 +22,8 @@ _PROVIDER_PATH = ("tts", "providers", "irodori-local")
 # so the future API/UI can serialize it without importing implementation details.
 FIELD_SCHEMA = {
     "caption": {"path": "caption", "label": "声のキャプション", "description": "Irodori が目指す声の性質。", "type": "string", "max_length": 500, "apply": "next_request"},
-    "ref_embed": {"path": "ref_embed", "label": "参照音声", "description": "登録済み voice asset から声質を選択します。", "type": "voice_asset", "apply": "next_request"},
+    "ref_wav": {"path": "ref_wav", "label": "参照音声", "description": "音声ファイルを選択します。", "type": "reference_audio", "apply": "next_request"},
+    "ref_embed": {"path": "ref_embed", "label": "話者埋め込み", "description": "登録済み .safetensors から話者を選択します。", "type": "speaker_embedding", "apply": "next_request"},
     "seed": {"path": "seed", "label": "再現性", "description": "同じ条件で再現しやすくする固定値。", "type": "integer", "minimum": 0, "maximum": 2147483647, "apply": "next_request"},
     "num_steps": {"path": "num_steps", "label": "生成ステップ数", "description": "増やすと品質が上がる場合がありますが、生成時間も増えます。", "type": "integer", "minimum": 1, "maximum": 100, "apply": "next_request"},
     "t_schedule_mode": {"path": "t_schedule_mode", "label": "スケジュール方式", "description": "サンプリング時間の配分方式。", "type": "string", "max_length": 32, "enum": ["sway", "linear"], "apply": "next_request"},
@@ -45,6 +48,10 @@ FIELD_SCHEMA = {
 
 _READ_ONLY_KEYS = {"api_key", "token", "password", "secret", "credentials", "command", "path", "prompt", "server_workdir", "base_url", "model", "voice", "voices_dir"}
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_REFERENCE_AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg", ".opus"}
+_SPEAKER_EMBEDDING_EXTENSIONS = {".safetensors"}
+_VOICE_ASSET_EXTENSIONS = _REFERENCE_AUDIO_EXTENSIONS | _SPEAKER_EMBEDDING_EXTENSIONS
+_VOICE_ASSET_IMPORT_LOCK = threading.Lock()
 
 
 class ConfigStoreError(Exception):
@@ -52,6 +59,10 @@ class ConfigStoreError(Exception):
 
 
 class ConfigConflictError(ConfigStoreError):
+    pass
+
+
+class VoiceAssetImportError(ConfigStoreError):
     pass
 
 
@@ -134,8 +145,9 @@ def read_values(root: dict[str, Any]) -> dict[str, Any]:
     for key, meta in FIELD_SCHEMA.items():
         value = _get(provider, meta["path"])
         values[key] = meta.get("default") if value is None and "default" in meta else value
-    if "ref_embed" in values:
-        values["ref_embed"] = _voice_asset_id(values["ref_embed"], provider, _config.hermes_home())
+    for key in ("ref_wav", "ref_embed"):
+        if key in values:
+            values[key] = _voice_asset_id(values[key], provider, _config.hermes_home())
     return values
 
 
@@ -169,10 +181,12 @@ def _voice_roots(provider: dict[str, Any], home: Path) -> list[Path]:
     return list(dict.fromkeys(path.resolve() for path in roots))
 
 
-def _valid_voice_asset(value: Any, provider: dict[str, Any], home: Path) -> bool:
+def _valid_voice_asset(value: Any, provider: dict[str, Any], home: Path, extensions: set[str]) -> bool:
     if not isinstance(value, str) or not value or _CONTROL_RE.search(value):
         return False
     candidate = Path(value).expanduser()
+    if candidate.suffix.lower() not in extensions:
+        return False
     if not candidate.is_absolute():
         for root in _voice_roots(provider, home):
             resolved = (root / candidate).resolve()
@@ -217,14 +231,13 @@ def list_voice_assets(provider: dict[str, Any] | None = None, home: Path | None 
     """Return safe IDs for known voice files without exposing local paths."""
     home = home or _config.hermes_home()
     provider = provider if isinstance(provider, dict) else _configured_provider()
-    allowed = {".safetensors", ".wav", ".flac", ".mp3", ".ogg", ".opus"}
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for root in _voice_roots(provider, home):
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in allowed:
+            if not path.is_file() or path.suffix.lower() not in _VOICE_ASSET_EXTENSIONS:
                 continue
             try:
                 relative = path.resolve().relative_to(root).as_posix()
@@ -237,7 +250,92 @@ def list_voice_assets(provider: dict[str, Any] | None = None, home: Path | None 
     return result
 
 
-def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home: Path | None = None) -> dict[str, list[dict[str, str]]]:
+def import_voice_asset(
+    filename: str,
+    content: bytes,
+    kind: str,
+    *,
+    provider: dict[str, Any] | None = None,
+    home: Path | None = None,
+) -> dict[str, str]:
+    """Copy a browser-selected file into the configured managed voices directory."""
+    extensions = {
+        "reference_audio": _REFERENCE_AUDIO_EXTENSIONS,
+        "speaker_embedding": _SPEAKER_EMBEDDING_EXTENSIONS,
+    }.get(kind)
+    if extensions is None:
+        raise VoiceAssetImportError("Unknown voice asset type.")
+    if not isinstance(filename, str) or not filename or _CONTROL_RE.search(filename):
+        raise VoiceAssetImportError("A valid filename is required.")
+    if filename != Path(filename).name or "/" in filename or "\\" in filename or filename in {".", ".."}:
+        raise VoiceAssetImportError("Voice asset filename cannot contain a path.")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in extensions:
+        expected = "audio file" if kind == "reference_audio" else ".safetensors file"
+        raise VoiceAssetImportError(f"Expected an {expected}.")
+    if not content:
+        raise VoiceAssetImportError("Voice asset file is empty.")
+    if not _valid_voice_asset_content(content, suffix):
+        raise VoiceAssetImportError("Voice asset content does not match its file extension.")
+
+    home = home or _config.hermes_home()
+    provider = provider if isinstance(provider, dict) else _configured_provider()
+    root = _voice_roots(provider, home)[0]
+    root.mkdir(parents=True, exist_ok=True)
+    with _VOICE_ASSET_IMPORT_LOCK:
+        stem = Path(filename).stem
+        target = root / filename
+        index = 2
+        while target.exists():
+            target = root / f"{stem}-{index}{suffix}"
+            index += 1
+
+        fd, temp_name = tempfile.mkstemp(prefix=".irodori-import-", suffix=suffix, dir=str(root))
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, target)
+        except Exception:
+            try:
+                os.unlink(temp_name)
+            except FileNotFoundError:
+                pass
+            raise
+    relative = target.relative_to(root).as_posix()
+    return {"id": relative, "label": relative, "type": suffix.lstrip(".")}
+
+
+def _valid_voice_asset_content(content: bytes, suffix: str) -> bool:
+    if suffix == ".wav":
+        return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WAVE"
+    if suffix == ".flac":
+        return content.startswith(b"fLaC")
+    if suffix in {".ogg", ".opus"}:
+        return content.startswith(b"OggS")
+    if suffix == ".mp3":
+        return content.startswith(b"ID3") or (len(content) >= 2 and content[0] == 0xFF and content[1] & 0xE0 == 0xE0)
+    if suffix == ".safetensors":
+        if len(content) < 10:
+            return False
+        header_size = int.from_bytes(content[:8], "little")
+        if header_size <= 0 or header_size > len(content) - 8:
+            return False
+        try:
+            return isinstance(json.loads(content[8:8 + header_size]), dict)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+    return False
+
+
+def validate_values(
+    values: Any,
+    *,
+    provider: dict[str, Any] | None = None,
+    home: Path | None = None,
+    existing_values: dict[str, Any] | None = None,
+) -> dict[str, list[dict[str, str]]]:
     result = {"errors": [], "warnings": [], "info": []}
     if not isinstance(values, dict):
         _issue(result["errors"], "*", "Settings must be a mapping.")
@@ -252,6 +350,8 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
             continue
         meta = FIELD_SCHEMA[key]
         kind = meta["type"]
+        if value is None:
+            continue
         if isinstance(value, str) and _CONTROL_RE.search(value):
             _issue(result["errors"], key, "Control characters are not allowed.")
             continue
@@ -262,9 +362,15 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
                 _issue(result["errors"], key, "Value exceeds the maximum length.")
             elif key.endswith("model") and ("/" in value or "\\" in value or any(char in value for char in ";|&$`<>")):
                 _issue(result["errors"], key, "Model identifiers cannot contain paths or commands.")
-        elif kind == "voice_asset":
-            if not _valid_voice_asset(value, provider, home):
-                _issue(result["errors"], key, "Reference voice must be an existing file under an Irodori voices directory.")
+        elif kind in {"reference_audio", "speaker_embedding"}:
+            if value in {None, ""}:
+                continue
+            if existing_values is not None and value == existing_values.get(key):
+                continue
+            extensions = _REFERENCE_AUDIO_EXTENSIONS if kind == "reference_audio" else _SPEAKER_EMBEDDING_EXTENSIONS
+            if not _valid_voice_asset(value, provider, home, extensions):
+                expected = "audio" if kind == "reference_audio" else ".safetensors"
+                _issue(result["errors"], key, f"Value must be an existing {expected} file under an Irodori voices directory.")
         elif kind == "boolean":
             if not isinstance(value, bool):
                 _issue(result["errors"], key, "Expected a boolean.")
@@ -321,6 +427,15 @@ class ConfigStore:
     def read_values(self) -> dict[str, Any]:
         return read_values(self._load())
 
+    def validate(self, values: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
+        root = self._load()
+        return validate_values(
+            values,
+            provider=_provider(root),
+            home=_config.hermes_home(),
+            existing_values=read_values(root),
+        )
+
     def revision(self) -> str:
         if not self.path.exists():
             return "missing"
@@ -354,12 +469,13 @@ class ConfigStore:
                 raise ConfigConflictError("Configuration changed since it was read.")
             root = self._load()
             provider = _provider(root, create=True)
-            validation = validate_values(values, provider=provider, home=_config.hermes_home())
+            existing_values = read_values(root)
+            validation = validate_values(values, provider=provider, home=_config.hermes_home(), existing_values=existing_values)
             if validation["errors"]:
                 return {"saved": False, "validation": validation, "revision": current_revision}
             for key, value in values.items():
                 stored_value = value
-                if key == "ref_embed":
+                if key in {"ref_wav", "ref_embed"}:
                     stored_value = _voice_asset_path(value, provider, _config.hermes_home())
                 _set(provider, FIELD_SCHEMA[key]["path"], stored_value)
             had_original = self.path.exists()
@@ -391,7 +507,7 @@ class ConfigStore:
                     pass
                 raise
             reloaded = self._load()
-            post_validation = validate_values(values, provider=_provider(reloaded), home=_config.hermes_home())
+            post_validation = validate_values(values, provider=_provider(reloaded), home=_config.hermes_home(), existing_values=existing_values)
             if post_validation["errors"] or read_values(reloaded) != {**read_values(root), **{}}:
                 raise ConfigStoreError("Saved configuration failed post-write validation.")
             return {"saved": True, "backup": str(backup) if had_original else None, "values": read_values(reloaded), "revision": self.revision(), "validation": {"errors": [], "warnings": [], "info": [{"field": key, "message": "Saved."} for key in values]}}

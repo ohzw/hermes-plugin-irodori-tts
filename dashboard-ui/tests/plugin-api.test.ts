@@ -49,4 +49,12 @@ describe('Hermes plugin API client', () => {
     expect(result.type).toBe('audio/mpeg');
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
+
+  it('surfaces FastAPI detail messages for rejected imports', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({detail: 'Expected an audio file.'}), {status: 400, statusText: 'Bad Request'}),
+    );
+
+    await expect(api.importVoiceAsset(new File(['bad'], 'bad.txt'), 'reference_audio')).rejects.toThrow('Expected an audio file.');
+  });
 });

@@ -23,7 +23,8 @@ describe('Hermes Irodori dashboard launcher', () => {
       .mockResolvedValueOnce({running: true, url: URL, pid: 42})
       .mockResolvedValueOnce({running: false, url: URL});
 
-    render(<Launcher />);
+    const {container} = render(<Launcher />);
+    expect(container.querySelector('.irodori-launcher__mark .brand-mascot')).toHaveAttribute('src', expect.stringMatching(/irodori-voice-mascot(?:-[^/]+)?\.png$/));
     const start = await screen.findByRole('button', {name: 'Start & Open'});
     fireEvent.click(start);
 

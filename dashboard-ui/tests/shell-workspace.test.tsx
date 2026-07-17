@@ -37,6 +37,7 @@ describe('redesigned app shell and workspace', () => {
     const navigation = within(topbar).getByRole('navigation', {name: 'Main navigation'});
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     expect(within(navigation).getByRole('link', {name: 'Workspace'})).toHaveAttribute('aria-current', 'page');
+    expect(topbar.querySelector('.brand-glyph .brand-mascot')).toHaveAttribute('src', expect.stringMatching(/irodori-voice-mascot(?:-[^/]+)?\.png$/));
   });
 
   it('shows Basic and Advanced settings tabs beside a single Playground', async () => {
@@ -46,6 +47,55 @@ describe('redesigned app shell and workspace', () => {
     expect(screen.getAllByRole('heading', {name: 'Playground'})).toHaveLength(1);
     expect(screen.getByRole('button', {name: 'Generate TTS'}).querySelector('canvas')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Preview'}).querySelector('canvas')).not.toBeInTheDocument();
+  });
+
+  it('opens native file selectors and selects an imported reference asset', async () => {
+    let importedBody: BodyInit | null | undefined;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const config = {
+        revision: 'r1',
+        values: {ref_wav: 'existing.wav', ref_embed: 'speaker.safetensors'},
+        schema: {fields: {
+          ref_wav: {label: '参照音声', type: 'reference_audio'},
+          ref_embed: {label: '話者埋め込み', type: 'speaker_embedding'},
+        }},
+      };
+      if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: []}));
+      if (url === '/api/config' && init?.method === 'PATCH') {
+        const submitted = JSON.parse(String(init.body)) as {values: Record<string, unknown>};
+        return new Response(JSON.stringify({data: {revision: 'r2', values: submitted.values}}));
+      }
+      if (url === '/api/config') return new Response(JSON.stringify({data: config}));
+      if (url === '/api/dictionary') return new Response(JSON.stringify({entries: []}));
+      if (url === '/api/config/voice-assets') return new Response(JSON.stringify({data: {assets: [
+        {id: 'existing.wav', label: 'existing.wav', type: 'wav'},
+        {id: 'speaker.safetensors', label: 'speaker.safetensors', type: 'safetensors'},
+      ]}}));
+      if (url.includes('/api/config/voice-assets/import')) {
+        importedBody = init?.body;
+        return new Response(JSON.stringify({data: {asset: {id: 'new.wav', label: 'new.wav', type: 'wav'}}}));
+      }
+      return new Response(JSON.stringify({ok: true, data: {}}));
+    });
+
+    await renderLoadedApp();
+    expect(screen.getByRole('combobox', {name: '参照音声'})).toHaveValue('existing.wav');
+    expect(screen.getByRole('combobox', {name: '話者埋め込み'})).toHaveValue('speaker.safetensors');
+
+    const input = screen.getByLabelText('参照音声ファイルを選択');
+    const file = new File(['wave-data'], 'new.wav', {type: 'audio/wav'});
+    fireEvent.change(input, {target: {files: [file]}});
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(importedBody).toBe(file);
+    expect(screen.getByRole('combobox', {name: '参照音声'})).toHaveValue('new.wav');
+    expect(screen.getByRole('option', {name: 'new.wav'})).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Save revision'}));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole('combobox', {name: '参照音声'})).toHaveValue('new.wav');
+    expect(screen.getByRole('combobox', {name: '話者埋め込み'})).toHaveValue('speaker.safetensors');
   });
 
   it('does not invent decorative timing data when the workspace has no samples', async () => {

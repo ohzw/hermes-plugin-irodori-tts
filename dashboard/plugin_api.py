@@ -43,13 +43,15 @@ from irodori_tts_settings import (  # noqa: E402
     ConfigConflictError,
     ConfigStore,
     ConfigStoreError,
+    VoiceAssetImportError,
+    import_voice_asset,
     list_voice_assets,
     schema as settings_schema,
-    validate_values,
 )
 
 router = APIRouter()
 _PLAYGROUND_LOCK = threading.Lock()
+_MAX_VOICE_ASSET_BYTES = 64 * 1024 * 1024
 _FORMATS = {
     "mp3": "audio/mpeg",
     "ogg": "audio/ogg",
@@ -90,7 +92,7 @@ def _config_update(payload: dict[str, Any], *, validate_only: bool = False) -> d
     if not isinstance(values, dict):
         raise HTTPException(status_code=400, detail="values must be an object")
     if validate_only:
-        result = validate_values(values)
+        result = ConfigStore().validate(values)
         if result["errors"]:
             raise HTTPException(status_code=400, detail=result)
         return {"ok": True, "data": result, "warnings": result["warnings"], "error": None}
@@ -103,6 +105,7 @@ def _config_update(payload: dict[str, Any], *, validate_only: bool = False) -> d
     if not result.get("saved"):
         raise HTTPException(status_code=400, detail=result.get("validation") or {})
     result["apply_status"] = "applied"
+    result["schema"] = settings_schema()
     return {
         "ok": True,
         "data": result,
@@ -200,6 +203,27 @@ async def config_view():
 @router.get("/config/voice-assets")
 async def voice_assets():
     return {"ok": True, "data": {"assets": list_voice_assets()}, "warnings": [], "error": None}
+
+
+@router.post("/config/voice-assets/import")
+async def voice_asset_import(request: Request, kind: str, filename: str):
+    declared_size = request.headers.get("content-length")
+    if declared_size:
+        try:
+            if int(declared_size) > _MAX_VOICE_ASSET_BYTES:
+                raise HTTPException(status_code=413, detail="Voice asset exceeds the 64 MiB limit.")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header.")
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > _MAX_VOICE_ASSET_BYTES:
+            raise HTTPException(status_code=413, detail="Voice asset exceeds the 64 MiB limit.")
+        content.extend(chunk)
+    try:
+        asset = await run_in_threadpool(import_voice_asset, filename, bytes(content), kind)
+    except VoiceAssetImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "data": {"asset": asset}, "warnings": [], "error": None}
 
 
 @router.get("/requests")
