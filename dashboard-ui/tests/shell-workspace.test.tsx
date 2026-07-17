@@ -31,6 +31,13 @@ describe('redesigned app shell and workspace', () => {
     expect(screen.getAllByRole('link')).toHaveLength(5);
   });
 
+  it('uses the approved top navigation shell instead of a vertical sidebar', async () => {
+    await renderLoadedApp();
+    expect(document.querySelector('.shell-topbar')).toBeInTheDocument();
+    expect(document.querySelector('.shell-sidebar')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', {name: 'Workspace'})).toHaveAttribute('aria-current', 'page');
+  });
+
   it('shows Basic and Advanced settings tabs beside a single Playground', async () => {
     await renderLoadedApp();
     expect(screen.getByRole('tab', {name: 'Basic'})).toBeInTheDocument();

@@ -5,7 +5,7 @@ import {Workspace} from './features/workspace';
 import {History} from './features/history';
 import {Dictionary} from './features/dictionary';
 import {Diagnostics} from './features/diagnostics';
-import {Badge, Separator} from './components/ui';
+import {Badge} from './components/ui';
 import {
   canonicalPath,
   destinationFromPath,
@@ -123,24 +123,22 @@ export default function App() {
 
   return (
     <div className="irodori-plugin-root app-shell">
-      <aside className="shell-sidebar">
+      <header className="shell-topbar">
         <div className="shell-brand">
           <div className="brand-glyph" aria-hidden="true">I</div>
-          <div><div className="eyebrow">IRODORI TTS</div><strong>Voice console</strong></div>
+          <div><strong>Irodori</strong><div className="eyebrow">LOCAL VOICE STUDIO</div></div>
         </div>
         <Navigation active={tab} />
-        <div className="sidebar-note"><span className="dither-orb" aria-hidden="true" />Local-first voice tools</div>
-      </aside>
+        <div
+          className="shell-status"
+          aria-live="polite"
+          title={`${connection}${lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}`}
+        >
+          <Badge className={status.health?.ok ? 'badge-online' : 'badge-offline'}><span className="status-dot" />{status.health?.ok ? 'Service online' : 'Service unavailable'}</Badge>
+          <span className="connection-label">{connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Polling'}</span>
+        </div>
+      </header>
       <div className="shell-main">
-        <header className="shell-header">
-          <div className="mobile-brand"><span className="brand-glyph" aria-hidden="true">I</span><strong>Irodori TTS</strong></div>
-          <div className="shell-title"><span className="eyebrow">LOCAL VOICE GENERATION</span><h1>{destinations.find((item) => item.id === tab)?.label}</h1></div>
-          <div className="shell-status" aria-live="polite">
-            <Badge className={status.health?.ok ? 'badge-online' : 'badge-offline'}><span className="status-dot" />{status.health?.ok ? 'Service online' : 'Service unavailable'}</Badge>
-            <span className="refresh-label">{connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Reconnecting · 5s fallback'}{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString()}` : ''}</span>
-          </div>
-        </header>
-        <Separator />
         {error && <div className="shell-alert" role="alert">{error}</div>}
         <main className="shell-content">{content}</main>
       </div>
