@@ -10,7 +10,7 @@ type VoiceAsset = {id: string; label: string};
 type ValidationResult = {warnings?: string[]; errors?: string[]};
 
 type SettingGroup = {title: string; keys: string[]};
-const basicGroups: SettingGroup[] = [{title: 'Generation basics', keys: ['caption', 'ref_embed', 'seed']}];
+const basicGroups: SettingGroup[] = [{title: 'Generation basics', keys: ['caption', 'ref_wav', 'ref_embed', 'seed']}];
 const advancedGroups: SettingGroup[] = [
   {title: 'Quality and speed', keys: ['num_steps', 't_schedule_mode', 'sway_coeff', 'cfg_scale_text', 'cfg_scale_caption', 'cfg_scale_speaker']},
   {title: 'Long-form processing', keys: ['chunking_enabled', 'chunk_min_chars', 'first_sentence_chunk_min_chars']},
@@ -31,11 +31,13 @@ function FieldControl({
   value,
   assets,
   onChange,
+  onFile,
 }: {
   meta: FieldMeta;
   value: unknown;
   assets: VoiceAsset[];
   onChange: (value: unknown) => void;
+  onFile: (file: File) => Promise<void>;
 }) {
   if (meta.type === 'boolean') {
     return (
@@ -63,6 +65,19 @@ function FieldControl({
         ))}
       </Select>
     );
+  }
+
+  if (meta.type === 'file') {
+    return <input
+      className="ui-input"
+      type="file"
+      accept=".wav,.flac,.mp3,.ogg,.opus"
+      aria-label={meta.label}
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        if (file) void onFile(file);
+      }}
+    />;
   }
 
   if (meta.type === 'textarea') {
@@ -113,12 +128,14 @@ function SettingsGroup({
   draft,
   assets,
   onChange,
+  onFile,
 }: {
   group: SettingGroup;
   schema: Record<string, FieldMeta>;
   draft: Record<string, unknown>;
   assets: VoiceAsset[];
   onChange: (key: string, value: unknown) => void;
+  onFile: (key: string, file: File) => Promise<void>;
 }) {
   return (
     <section className="settings-group">
@@ -136,6 +153,7 @@ function SettingsGroup({
               value={configValue(draft, key)}
               assets={assets}
               onChange={(value) => onChange(key, value)}
+              onFile={(file) => onFile(key, file)}
             />
           </label>
         );
@@ -164,6 +182,17 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
   if (!saved) return <div className="workspace-loading">Loading configuration</div>;
   const schema = saved.schema?.fields ?? {};
   const updateValue = (key: string, value: unknown) => { setDraft((current) => withConfigValue(current, key, value)); setWarnings([]); setErrors([]); };
+  const importReferenceAudio = async (key: string, file: File) => {
+    setStatus('Importing reference audio'); setWarnings([]); setErrors([]);
+    try {
+      const result = await api.importReferenceAudio(file);
+      updateValue(key, result.data.asset.id);
+      setStatus('Imported · save the revision to apply');
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : 'Unable to import reference audio']);
+      setStatus('Import failed');
+    }
+  };
   const resetConfig = () => { setDraft(saved.values ?? {}); setWarnings([]); setErrors([]); setStatus('Reset to saved values'); };
   const validateConfig = async () => {
     setStatus('Validating'); setWarnings([]); setErrors([]);
@@ -172,7 +201,7 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
   };
   const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setStatus('Saving'); setWarnings([]); setErrors([]);
-    try { const result = await api.saveConfig({revision: saved.revision, values: draft}); setSaved(result.data); setDraft(result.data.values ?? {}); setStatus('Saved · applies to the next generation'); }
+    try { const result = await api.saveConfig({revision: saved.revision, values: draft}); const next = {...result.data, schema: result.data.schema ?? saved.schema}; setSaved(next); setDraft(next.values ?? {}); setStatus('Saved · applies to the next generation'); }
     catch (error) { setErrors([error instanceof Error ? error.message : 'Unable to save settings']); setStatus('Save failed'); }
   };
   const groups = activeTab === 'basic' ? basicGroups : advancedGroups;
@@ -204,7 +233,7 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
     <div className="workspace-layout">
       <Card className="settings-card"><CardHeader><div><h3>Settings</h3><p>Draft changes stay local until saved.</p></div></CardHeader><CardContent>
         <Tabs><TabsList><TabsTrigger active={activeTab === 'basic'} onClick={() => setActiveTab('basic')}>Basic</TabsTrigger><TabsTrigger active={activeTab === 'advanced'} onClick={() => setActiveTab('advanced')}>Advanced</TabsTrigger></TabsList>
-          <form className="settings-form" onSubmit={saveConfig}><div role="tabpanel" aria-label={`${activeTab} settings`}><div className="settings-groups">{groups.map((group) => <SettingsGroup key={group.title} group={group} schema={schema} draft={draft} assets={assets} onChange={updateValue} />)}</div></div>
+          <form className="settings-form" onSubmit={saveConfig}><div role="tabpanel" aria-label={`${activeTab} settings`}><div className="settings-groups">{groups.map((group) => <SettingsGroup key={group.title} group={group} schema={schema} draft={draft} assets={assets} onChange={updateValue} onFile={importReferenceAudio} />)}</div></div>
             <div className="settings-actions"><Button type="submit" disabled={!dirty || errors.length > 0}>Save revision</Button><Button type="button" variant="outline" onClick={() => void validateConfig()}>Validate</Button><Button type="button" variant="ghost" onClick={resetConfig} disabled={!dirty}>Reset</Button><span role="status">{status}</span></div>
             {warnings.length > 0 && <ul className="config-warnings" role="status">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
             {errors.length > 0 && <ul className="config-errors" role="alert">{errors.map((error) => <li key={error}>{error}</li>)}</ul>}

@@ -128,8 +128,8 @@ export default function App() {
     <div className="irodori-plugin-root app-shell">
       <header className="shell-topbar">
         <div className="shell-brand">
-          <div className="brand-glyph" aria-hidden="true">I</div>
-          <div><strong>Irodori</strong><div className="eyebrow">LOCAL VOICE STUDIO</div></div>
+          <div className="brand-glyph" aria-hidden="true">彩</div>
+          <div><strong>Irodori</strong><div className="eyebrow">Voice Studio</div></div>
         </div>
         <Navigation active={tab} />
         <div

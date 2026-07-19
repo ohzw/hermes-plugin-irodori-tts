@@ -43,9 +43,56 @@ describe('redesigned app shell and workspace', () => {
     await renderLoadedApp();
     expect(screen.getByRole('tab', {name: 'Basic'})).toBeInTheDocument();
     expect(screen.getByRole('tab', {name: 'Advanced'})).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', {name: 'Playground'})).toHaveLength(1);
+    expect(screen.getAllByRole('heading', {name: 'Test this voice'})).toHaveLength(1);
     expect(screen.getByRole('button', {name: 'Generate TTS'}).querySelector('canvas')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Preview'}).querySelector('canvas')).not.toBeInTheDocument();
+  });
+
+  it('uses a native file input for reference audio', async () => {
+    let importedBody: BodyInit | null | undefined;
+    let savedValues: Record<string, unknown> | undefined;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: []}));
+      if (url === '/api/config' && init?.method === 'PATCH') {
+        savedValues = (JSON.parse(String(init.body)) as {values: Record<string, unknown>}).values;
+        return new Response(JSON.stringify({data: {revision: 'r2', values: savedValues}}));
+      }
+      if (url === '/api/config') return new Response(JSON.stringify({data: {
+        revision: 'r1',
+        values: {ref_wav: null, ref_embed: 'speaker.safetensors'},
+        schema: {fields: {
+          ref_wav: {label: '参照音声', type: 'file'},
+          ref_embed: {label: '話者埋め込み', type: 'voice_asset'},
+        }},
+      }}));
+      if (url === '/api/config/voice-assets') return new Response(JSON.stringify({data: {assets: [
+        {id: 'speaker.safetensors', label: 'speaker.safetensors'},
+      ]}}));
+      if (url.includes('/api/config/reference-audio')) {
+        importedBody = init?.body;
+        return new Response(JSON.stringify({data: {asset: {id: 'sample.wav', label: 'sample.wav'}}}));
+      }
+      if (url === '/api/dictionary') return new Response(JSON.stringify({entries: []}));
+      return new Response(JSON.stringify({ok: true, data: {}}));
+    });
+
+    await renderLoadedApp();
+    const input = screen.getByLabelText('参照音声');
+    expect(input).toHaveAttribute('type', 'file');
+    expect(input).toHaveAttribute('accept', '.wav,.flac,.mp3,.ogg,.opus');
+    expect(screen.queryByRole('spinbutton', {name: '参照音声'})).not.toBeInTheDocument();
+
+    const file = new File(['wave'], 'sample.wav', {type: 'audio/wav'});
+    fireEvent.change(input, {target: {files: [file]}});
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(importedBody).toBe(file);
+    expect(screen.getByRole('button', {name: 'Save revision'})).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', {name: 'Save revision'}));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(savedValues?.ref_wav).toBe('sample.wav');
+    expect(screen.getByLabelText('参照音声')).toHaveAttribute('type', 'file');
   });
 
   it('does not invent decorative timing data when the workspace has no samples', async () => {

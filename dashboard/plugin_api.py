@@ -43,6 +43,8 @@ from irodori_tts_settings import (  # noqa: E402
     ConfigConflictError,
     ConfigStore,
     ConfigStoreError,
+    VoiceAssetImportError,
+    import_reference_audio,
     list_voice_assets,
     schema as settings_schema,
     validate_values,
@@ -50,6 +52,7 @@ from irodori_tts_settings import (  # noqa: E402
 
 router = APIRouter()
 _PLAYGROUND_LOCK = threading.Lock()
+_MAX_REFERENCE_AUDIO_BYTES = 64 * 1024 * 1024
 _FORMATS = {
     "mp3": "audio/mpeg",
     "ogg": "audio/ogg",
@@ -103,6 +106,7 @@ def _config_update(payload: dict[str, Any], *, validate_only: bool = False) -> d
     if not result.get("saved"):
         raise HTTPException(status_code=400, detail=result.get("validation") or {})
     result["apply_status"] = "applied"
+    result["schema"] = settings_schema()
     return {
         "ok": True,
         "data": result,
@@ -200,6 +204,20 @@ async def config_view():
 @router.get("/config/voice-assets")
 async def voice_assets():
     return {"ok": True, "data": {"assets": list_voice_assets()}, "warnings": [], "error": None}
+
+
+@router.post("/config/reference-audio")
+async def reference_audio_import(request: Request, filename: str):
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > _MAX_REFERENCE_AUDIO_BYTES:
+            raise HTTPException(status_code=413, detail="Reference audio exceeds the 64 MiB limit.")
+        content.extend(chunk)
+    try:
+        asset = await run_in_threadpool(import_reference_audio, filename, bytes(content))
+    except VoiceAssetImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "data": {"asset": asset}, "warnings": [], "error": None}
 
 
 @router.get("/requests")
