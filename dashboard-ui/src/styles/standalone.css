@@ -6,16 +6,17 @@ body,
   margin: 0;
 }
 
+/* Standalone page backdrop — slightly deeper than the app shell so the
+   console surface reads as a distinct elevated layer. */
 body {
-  background-color: hsl(240 15% 4%);
+  background-color: hsl(220 16% 4.5%);
   background-image:
-    radial-gradient(circle at 12% 12%, hsl(264 70% 38% / .30), transparent 27%),
-    radial-gradient(circle at 90% 88%, hsl(196 78% 38% / .23), transparent 28%);
-  background-size: auto, auto;
+    radial-gradient(1000px 420px at 10% 0%, hsl(204 84% 34% / .1), transparent 60%),
+    radial-gradient(900px 500px at 95% 100%, hsl(258 60% 30% / .08), transparent 60%);
 }
 
 #root > .irodori-plugin-root.app-shell {
-  width: min(1400px, calc(100% - 32px));
+  width: min(1320px, calc(100% - 32px));
   min-height: calc(100vh - 32px);
 }
 
