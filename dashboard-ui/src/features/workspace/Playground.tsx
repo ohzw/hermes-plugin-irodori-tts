@@ -43,7 +43,7 @@ export function Playground() {
   return (
     <section className="playground">
       <div className="page-heading playground-heading">
-        <div><div className="eyebrow">PLAYGROUND</div><h2>Playground</h2><p>Preview the rewrite or generate audio without leaving your workspace.</p></div>
+        <div><div className="eyebrow">Playground</div><h3>Test this voice</h3><p>Preview the rewrite or generate audio without leaving your workspace.</p></div>
       </div>
       <form className="playground-form" onSubmit={preview}>
         <label className="field-label" htmlFor="playground-text">Input text</label>

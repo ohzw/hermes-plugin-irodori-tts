@@ -22,7 +22,16 @@ def load_api_module():
     return module
 
 
-def make_request(path: str) -> Request:
+def make_request(path: str, *, body: bytes = b"") -> Request:
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if sent:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        sent = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
     return Request({
         "type": "http",
         "method": "GET",
@@ -32,7 +41,7 @@ def make_request(path: str) -> Request:
         "scheme": "http",
         "server": ("testserver", 80),
         "client": ("testclient", 123),
-    })
+    }, receive)
 
 
 class DashboardPluginTests(unittest.TestCase):
@@ -85,6 +94,17 @@ class DashboardPluginTests(unittest.TestCase):
 
         self.assertEqual("rev-1", result["data"]["revision"])
         self.assertEqual("やさしい声", result["data"]["values"]["caption"])
+
+    def test_reference_audio_route_imports_the_raw_file(self):
+        api = load_api_module()
+        imported = {"id": "sample.wav", "label": "sample.wav", "type": "wav"}
+        request = make_request("/api/config/reference-audio", body=b"RIFF\x04\x00\x00\x00WAVE")
+
+        with mock.patch.object(api, "import_reference_audio", return_value=imported) as importer:
+            result = asyncio.run(api.reference_audio_import(request, filename="sample.wav"))
+
+        self.assertEqual(result["data"]["asset"], imported)
+        importer.assert_called_once_with("sample.wav", b"RIFF\x04\x00\x00\x00WAVE")
 
     def test_request_detail_rebases_legacy_audio_url_to_plugin_mount(self):
         api = load_api_module()

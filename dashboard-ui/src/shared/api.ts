@@ -17,7 +17,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     : undefined;
   const fetchJSON = dashboardWindow?.__HERMES_PLUGIN_SDK__?.fetchJSON;
   if (fetchJSON) return fetchJSON<T>(url, init);
-  const response = await fetch(url, init); const data: unknown = await response.json(); if (!response.ok || (record(data) && data.ok === false)) { const detail = record(data) && record(data.error) ? data.error : {}; const message = typeof detail.message === 'string' ? detail.message : response.statusText || 'API request failed'; const error = new Error(message) as Error & {status?: number; code?: string}; error.status = response.status; if (typeof detail.code === 'string') error.code = detail.code; throw error; } return data as T;
+  const response = await fetch(url, init); const data: unknown = await response.json(); if (!response.ok || (record(data) && data.ok === false)) { const detail = record(data) && record(data.error) ? data.error : {}; const fastApiDetail = record(data) ? data.detail : undefined; const message = typeof detail.message === 'string' ? detail.message : typeof fastApiDetail === 'string' ? fastApiDetail : response.statusText || 'API request failed'; const error = new Error(message) as Error & {status?: number; code?: string}; error.status = response.status; if (typeof detail.code === 'string') error.code = detail.code; throw error; } return data as T;
 }
 async function authenticatedBlob(url: string): Promise<Blob> {
   const dashboardWindow = typeof window !== 'undefined'
@@ -34,6 +34,10 @@ export const api = {
   status: () => request<Status>(apiPath('/status?limit=30')),
   config: () => request<{data: ConfigPayload}>(apiPath('/config')),
   voiceAssets: () => request<{data: {assets: Array<{id: string; label: string}>}}>(apiPath('/config/voice-assets')),
+  importReferenceAudio: (file: File) => request<{data: {asset: {id: string; label: string}}}>(
+    apiPath(`/config/reference-audio?filename=${encodeURIComponent(file.name)}`),
+    {method: 'POST', body: file},
+  ),
   validateConfig: (payload: unknown) => request<{data: ConfigPayload; warnings?: unknown[]}>(apiPath('/config/validate'), post(payload)),
   saveConfig: (payload: unknown) => request<{data: ConfigPayload; warnings?: unknown[]}>(apiPath('/config'), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}),
   dictionary: () => request<{entries: DictionaryEntry[]}>(apiPath('/dictionary')),
