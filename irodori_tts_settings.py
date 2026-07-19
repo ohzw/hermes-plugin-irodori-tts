@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -20,7 +21,8 @@ _PROVIDER_PATH = ("tts", "providers", "irodori-local")
 # so the future API/UI can serialize it without importing implementation details.
 FIELD_SCHEMA = {
     "caption": {"path": "caption", "label": "声のキャプション", "description": "Irodori が目指す声の性質。", "type": "string", "max_length": 500, "apply": "next_request"},
-    "ref_embed": {"path": "ref_embed", "label": "参照音声", "description": "登録済み voice asset から声質を選択します。", "type": "voice_asset", "apply": "next_request"},
+    "ref_wav": {"path": "ref_wav", "label": "参照音声", "description": "音声ファイルを選択します。", "type": "file", "apply": "next_request"},
+    "ref_embed": {"path": "ref_embed", "label": "話者埋め込み", "description": "登録済み voice asset から声質を選択します。", "type": "voice_asset", "apply": "next_request"},
     "seed": {"path": "seed", "label": "再現性", "description": "同じ条件で再現しやすくする固定値。", "type": "integer", "minimum": 0, "maximum": 2147483647, "apply": "next_request"},
     "num_steps": {"path": "num_steps", "label": "生成ステップ数", "description": "増やすと品質が上がる場合がありますが、生成時間も増えます。", "type": "integer", "minimum": 1, "maximum": 100, "apply": "next_request"},
     "t_schedule_mode": {"path": "t_schedule_mode", "label": "スケジュール方式", "description": "サンプリング時間の配分方式。", "type": "string", "max_length": 32, "enum": ["sway", "linear"], "apply": "next_request"},
@@ -45,6 +47,8 @@ FIELD_SCHEMA = {
 
 _READ_ONLY_KEYS = {"api_key", "token", "password", "secret", "credentials", "command", "path", "prompt", "server_workdir", "base_url", "model", "voice", "voices_dir"}
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg", ".opus"}
+_REFERENCE_AUDIO_LOCK = threading.Lock()
 
 
 class ConfigStoreError(Exception):
@@ -52,6 +56,10 @@ class ConfigStoreError(Exception):
 
 
 class ConfigConflictError(ConfigStoreError):
+    pass
+
+
+class VoiceAssetImportError(ConfigStoreError):
     pass
 
 
@@ -134,8 +142,8 @@ def read_values(root: dict[str, Any]) -> dict[str, Any]:
     for key, meta in FIELD_SCHEMA.items():
         value = _get(provider, meta["path"])
         values[key] = meta.get("default") if value is None and "default" in meta else value
-    if "ref_embed" in values:
-        values["ref_embed"] = _voice_asset_id(values["ref_embed"], provider, _config.hermes_home())
+    for key in ("ref_wav", "ref_embed"):
+        values[key] = _voice_asset_id(values[key], provider, _config.hermes_home())
     return values
 
 
@@ -237,6 +245,61 @@ def list_voice_assets(provider: dict[str, Any] | None = None, home: Path | None 
     return result
 
 
+def import_reference_audio(
+    filename: str,
+    content: bytes,
+    *,
+    provider: dict[str, Any] | None = None,
+    home: Path | None = None,
+) -> dict[str, str]:
+    if not filename or filename != Path(filename).name or "/" in filename or "\\" in filename or _CONTROL_RE.search(filename):
+        raise VoiceAssetImportError("Reference audio filename cannot contain a path.")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _AUDIO_EXTENSIONS:
+        raise VoiceAssetImportError("Unsupported reference audio format.")
+    if not _valid_audio_content(content, suffix):
+        raise VoiceAssetImportError("Reference audio content does not match its file extension.")
+
+    home = home or _config.hermes_home()
+    provider = provider if isinstance(provider, dict) else _configured_provider()
+    root = _voice_roots(provider, home)[0]
+    root.mkdir(parents=True, exist_ok=True)
+    with _REFERENCE_AUDIO_LOCK:
+        stem = Path(filename).stem
+        target = root / filename
+        index = 2
+        while target.exists():
+            target = root / f"{stem}-{index}{suffix}"
+            index += 1
+        fd, temp_name = tempfile.mkstemp(prefix=".irodori-ref-", suffix=suffix, dir=str(root))
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, target)
+        except Exception:
+            try:
+                os.unlink(temp_name)
+            except FileNotFoundError:
+                pass
+            raise
+    relative = target.relative_to(root).as_posix()
+    return {"id": relative, "label": relative, "type": suffix.lstrip(".")}
+
+
+def _valid_audio_content(content: bytes, suffix: str) -> bool:
+    if suffix == ".wav":
+        return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WAVE"
+    if suffix == ".flac":
+        return content.startswith(b"fLaC")
+    if suffix in {".ogg", ".opus"}:
+        return content.startswith(b"OggS")
+    if suffix == ".mp3":
+        return content.startswith(b"ID3") or (len(content) >= 2 and content[0] == 0xFF and content[1] & 0xE0 == 0xE0)
+    return False
+
+
 def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home: Path | None = None) -> dict[str, list[dict[str, str]]]:
     result = {"errors": [], "warnings": [], "info": []}
     if not isinstance(values, dict):
@@ -252,6 +315,8 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
             continue
         meta = FIELD_SCHEMA[key]
         kind = meta["type"]
+        if value is None:
+            continue
         if isinstance(value, str) and _CONTROL_RE.search(value):
             _issue(result["errors"], key, "Control characters are not allowed.")
             continue
@@ -265,6 +330,9 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
         elif kind == "voice_asset":
             if not _valid_voice_asset(value, provider, home):
                 _issue(result["errors"], key, "Reference voice must be an existing file under an Irodori voices directory.")
+        elif kind == "file":
+            if value != "" and (not _valid_voice_asset(value, provider, home) or Path(str(value)).suffix.lower() not in _AUDIO_EXTENSIONS):
+                _issue(result["errors"], key, "Reference audio must be an existing audio file under an Irodori voices directory.")
         elif kind == "boolean":
             if not isinstance(value, bool):
                 _issue(result["errors"], key, "Expected a boolean.")
@@ -359,7 +427,7 @@ class ConfigStore:
                 return {"saved": False, "validation": validation, "revision": current_revision}
             for key, value in values.items():
                 stored_value = value
-                if key == "ref_embed":
+                if key in {"ref_wav", "ref_embed"}:
                     stored_value = _voice_asset_path(value, provider, _config.hermes_home())
                 _set(provider, FIELD_SCHEMA[key]["path"], stored_value)
             had_original = self.path.exists()

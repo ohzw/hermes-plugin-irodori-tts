@@ -103,6 +103,24 @@ class SettingsTests(unittest.TestCase):
             self.assertFalse(settings.validate_values({"ref_embed": "/tmp/not-allowed"}, provider=provider, home=Path(home))["errors"] == [])
             self.assertFalse(settings.validate_values({"ref_embed": "alto.safetensors"}, provider=provider, home=Path(home))["errors"])
 
+    def test_reference_audio_schema_and_import_use_a_managed_audio_file(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "voices")
+            provider = {"voices_dir": str(voices)}
+            wav = b"RIFF\x04\x00\x00\x00WAVE"
+
+            self.assertEqual(settings.schema()["fields"]["ref_wav"]["type"], "file")
+            imported = settings.import_reference_audio("sample.wav", wav, provider=provider, home=Path(home))
+
+            self.assertEqual(imported["id"], "sample.wav")
+            self.assertEqual((voices / "sample.wav").read_bytes(), wav)
+            self.assertFalse(settings.validate_values({"ref_wav": "sample.wav"}, provider=provider, home=Path(home))["errors"])
+
+            with self.assertRaises(settings.VoiceAssetImportError):
+                settings.import_reference_audio("../outside.wav", wav, provider=provider, home=Path(home))
+            with self.assertRaises(settings.VoiceAssetImportError):
+                settings.import_reference_audio("fake.wav", b"not-wave", provider=provider, home=Path(home))
+
     def test_voice_asset_id_is_public_but_config_keeps_resolved_path(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
             voices = Path(home, "voices")
