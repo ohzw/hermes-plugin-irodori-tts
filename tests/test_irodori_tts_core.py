@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from irodori_tts_core import rewrite_preview, synthesize_text
+from irodori_tts_request import build_speech_payload
 
 
 class CoreTests(unittest.TestCase):
@@ -208,6 +209,20 @@ class CoreTests(unittest.TestCase):
             "seed": 1234,
         })
 
+
+    def test_v4_long_reference_payload_uses_plural_reference_field(self):
+        payload = build_speech_payload({
+            "ref_wav": "/voices/legacy.wav",
+            "ref_wavs": ["/voices/one.wav", "/voices/two.wav"],
+            "ref_embed": "/voices/legacy.safetensors",
+            "max_ref_seconds": "120",
+        }, "読み上げ本文")
+
+        self.assertEqual(payload["irodori"], {
+            "chunking_enabled": True,
+            "ref_wavs": ["/voices/one.wav", "/voices/two.wav"],
+            "max_ref_seconds": 120.0,
+        })
     def test_normal_synthesis_saves_request_and_audio_history(self):
         preview = {
             "speech_text": "読み上げ本文",

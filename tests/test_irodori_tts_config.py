@@ -20,6 +20,22 @@ class ConfigTests(unittest.TestCase):
             view = config.safe_config_view()
             self.assertNotIn("api_key", view)
 
+
+    def test_safe_view_reports_v4_reference_configuration_without_paths(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            Path(home, "config.yaml").write_text(
+                "tts:\n  providers:\n    irodori-local:\n"
+                "      ref_wavs:\n        - /private/one.wav\n        - /private/two.wav\n"
+                "      max_ref_seconds: 60\n",
+                encoding="utf-8",
+            )
+            view = config.safe_config_view()
+            group = next(group for group in view["groups"] if group["id"] == "tts-model-voice")
+            values = {item["key"]: item["value"] for item in group["items"]}
+            self.assertEqual(values["ref_wavs_count"], 2)
+            self.assertEqual(values["max_ref_seconds"], 60)
+            self.assertNotIn("/private/one.wav", repr(view))
+
     def test_audio_history_defaults_are_safe_and_allowlisted(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
             view = config.safe_config_view()

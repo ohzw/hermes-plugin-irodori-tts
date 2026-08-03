@@ -33,7 +33,7 @@ const post = (payload: unknown): RequestInit => ({ method: 'POST', headers: {'Co
 export const api = {
   status: () => request<Status>(apiPath('/status?limit=30')),
   config: () => request<{data: ConfigPayload}>(apiPath('/config')),
-  voiceAssets: () => request<{data: {assets: Array<{id: string; label: string}>}}>(apiPath('/config/voice-assets')),
+  voiceAssets: () => request<{data: {assets: Array<{id: string; label: string; type?: string}>}}>(apiPath('/config/voice-assets')),
   importReferenceAudio: (file: File) => request<{data: {asset: {id: string; label: string}}}>(
     apiPath(`/config/reference-audio?filename=${encodeURIComponent(file.name)}`),
     {method: 'POST', body: file},

@@ -3,6 +3,7 @@ tts:
   providers:
     irodori-local:
       base_url: http://127.0.0.1:8088/v1
+      # The API model ID stays irodori-tts; the server checkpoint defaults to v4-Small.
       model: irodori-tts
       output_format: mp3
       server_workdir: ~/src/Irodori-TTS-Server
@@ -11,8 +12,10 @@ tts:
       restart_on_error: true
       request_attempts: 2
       caption: ""
-      num_steps: 8
-      t_schedule_mode: sway
+      ref_wavs: []
+      max_ref_seconds:
+      num_steps: 40
+      t_schedule_mode: linear
       rewrite:
         enabled: true
         summary:

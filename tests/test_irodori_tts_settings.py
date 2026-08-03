@@ -24,7 +24,7 @@ class SettingsTests(unittest.TestCase):
             self.assertIn("model: keep-model", text)
 
     def test_schema_and_unknown_read_only_secret_command_path_prompt_rejected(self):
-        self.assertEqual(settings.schema()["schema_version"], 1)
+        self.assertEqual(settings.schema()["schema_version"], 2)
         result = settings.validate_values({"api_key": "secret", "command": "rm -rf /", "path": "/tmp/x", "prompt": "x", "nope": 1})
         self.assertEqual({item["field"] for item in result["errors"]}, {"api_key", "command", "path", "prompt", "nope"})
 
@@ -120,6 +120,42 @@ class SettingsTests(unittest.TestCase):
                 settings.import_reference_audio("../outside.wav", wav, provider=provider, home=Path(home))
             with self.assertRaises(settings.VoiceAssetImportError):
                 settings.import_reference_audio("fake.wav", b"not-wave", provider=provider, home=Path(home))
+
+    def test_long_reference_assets_round_trip_and_conflicting_modes_are_rejected(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "voices")
+            voices.mkdir()
+            for name in ("one.wav", "two.wav"):
+                (voices / name).write_bytes(b"RIFF\x04\x00\x00\x00WAVE")
+            self._config(home, f"tts:\n  providers:\n    irodori-local:\n      voices_dir: {voices}\n")
+            fields = settings.schema()["fields"]
+            self.assertEqual(fields["ref_wavs"]["type"], "voice_assets")
+            self.assertEqual(fields["max_ref_seconds"]["maximum"], 120.0)
+
+            result = settings.ConfigStore().update({"ref_wavs": ["one.wav", "two.wav"], "max_ref_seconds": 120})
+            self.assertTrue(result["saved"])
+            self.assertEqual(settings.ConfigStore().read_values()["ref_wavs"], ["one.wav", "two.wav"])
+            self.assertEqual(settings.ConfigStore().read_values()["max_ref_seconds"], 120)
+
+            conflict = settings.validate_values(
+                {"ref_wav": "one.wav", "ref_wavs": ["two.wav"]},
+                provider={"voices_dir": str(voices)},
+                home=Path(home),
+            )
+            self.assertEqual({item["field"] for item in conflict["errors"]}, {"ref_wavs"})
+
+    def test_long_reference_rejects_non_audio_or_missing_assets(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):
+            voices = Path(home, "voices")
+            voices.mkdir()
+            (voices / "speaker.safetensors").write_bytes(b"asset")
+            provider = {"voices_dir": str(voices)}
+            result = settings.validate_values(
+                {"ref_wavs": ["speaker.safetensors", "missing.wav"]},
+                provider=provider,
+                home=Path(home),
+            )
+            self.assertEqual({item["field"] for item in result["errors"]}, {"ref_wavs"})
 
     def test_voice_asset_id_is_public_but_config_keeps_resolved_path(self):
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"HERMES_HOME": home}, clear=False):

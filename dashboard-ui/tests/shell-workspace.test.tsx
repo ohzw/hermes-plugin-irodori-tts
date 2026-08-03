@@ -23,6 +23,18 @@ async function renderLoadedApp() {
   });
 }
 
+function requestValues(body: BodyInit | null | undefined): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(String(body));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !('values' in parsed)) {
+    throw new Error('Expected a config payload');
+  }
+  const values = parsed.values;
+  if (!values || typeof values !== 'object' || Array.isArray(values)) {
+    throw new Error('Expected config values');
+  }
+  return Object.fromEntries(Object.entries(values));
+}
+
 describe('redesigned app shell and workspace', () => {
   it('opens Workspace by default with five navigation destinations', async () => {
     await renderLoadedApp();
@@ -55,7 +67,7 @@ describe('redesigned app shell and workspace', () => {
       const url = String(input);
       if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: []}));
       if (url === '/api/config' && init?.method === 'PATCH') {
-        savedValues = (JSON.parse(String(init.body)) as {values: Record<string, unknown>}).values;
+        savedValues = requestValues(init.body);
         return new Response(JSON.stringify({data: {revision: 'r2', values: savedValues}}));
       }
       if (url === '/api/config') return new Response(JSON.stringify({data: {
@@ -93,6 +105,44 @@ describe('redesigned app shell and workspace', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(savedValues?.ref_wav).toBe('sample.wav');
     expect(screen.getByLabelText('参照音声')).toHaveAttribute('type', 'file');
+  });
+
+
+  it('imports and saves multiple v4 long-reference clips', async () => {
+    let savedValues: Record<string, unknown> | undefined;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/status')) return new Response(JSON.stringify({now: 'now', health: {ok: true}, recent: []}));
+      if (url === '/api/config' && init?.method === 'PATCH') {
+        savedValues = requestValues(init.body);
+        return new Response(JSON.stringify({data: {revision: 'r2', values: savedValues}}));
+      }
+      if (url === '/api/config') return new Response(JSON.stringify({data: {
+        revision: 'r1',
+        values: {ref_wavs: []},
+        schema: {fields: {
+          ref_wavs: {label: '長時間参照音声', type: 'voice_assets'},
+        }},
+      }}));
+      if (url === '/api/config/voice-assets') return new Response(JSON.stringify({data: {assets: [
+        {id: 'existing.wav', label: 'existing.wav', type: 'wav'},
+      ]}}));
+      if (url.includes('/api/config/reference-audio')) {
+        return new Response(JSON.stringify({data: {asset: {id: 'imported.wav', label: 'imported.wav', type: 'wav'}}}));
+      }
+      if (url === '/api/dictionary') return new Response(JSON.stringify({entries: []}));
+      return new Response(JSON.stringify({ok: true, data: {}}));
+    });
+
+    await renderLoadedApp();
+    expect(screen.getByRole('listbox', {name: '長時間参照音声'})).toBeInTheDocument();
+    const input = screen.getByLabelText('長時間参照音声を追加');
+    fireEvent.change(input, {target: {files: [new File(['wave'], 'imported.wav', {type: 'audio/wav'})]}});
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    fireEvent.click(screen.getByRole('button', {name: 'Save revision'}));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(savedValues?.ref_wavs).toEqual(['imported.wav']);
   });
 
   it('does not invent decorative timing data when the workspace has no samples', async () => {

@@ -1,5 +1,5 @@
 name: irodori-tts
-version: 0.1.0
-description: Local Irodori TTS provider with a native Hermes dashboard extension
+version: 0.2.0
+description: Local Irodori-TTS-v4-Small provider with a native Hermes dashboard extension
 author: ohzw
 kind: standalone

@@ -79,7 +79,29 @@ def get_public_status(limit: int = 20) -> dict:
     health = _fetch_health(base_url); dictionary = load_dictionary(); entries = dictionary.get("entries") or []; summary = summarize(records)
     rewrite = cfg.get("rewrite") or {}; server_log = cfg.get("server_log") or DEFAULT_SERVER_LOG; recent = list(reversed(records[-limit:]))
     return {"now": time.strftime("%Y-%m-%d %H:%M:%S"), "base_url": base_url, "health": health, "listener_pids": _listener_pids(base_url), "slow_threshold_ms": threshold,
-            "config": {"model": cfg.get("model"), "voice": cfg.get("voice"), "num_steps": cfg.get("num_steps"), "t_schedule_mode": cfg.get("t_schedule_mode"), "sway_coeff": cfg.get("sway_coeff"), "chunking_enabled": cfg.get("chunking_enabled"), "chunk_min_chars": cfg.get("chunk_min_chars"), "first_sentence_chunk_min_chars": cfg.get("first_sentence_chunk_min_chars"), "seed": cfg.get("seed"), "ref_embed": cfg.get("ref_embed"), "caption": cfg.get("caption"), "server_log": server_log, "rewrite_enabled": rewrite.get("enabled"), "rewrite_provider": rewrite.get("provider"), "rewrite_model": rewrite.get("model"), "dictionary_enabled": dictionary_config().get("enabled"), "dictionary_path": str(dictionary_path()), "dictionary_entries": len(entries)},
+            "config": {
+                "model": cfg.get("model"),
+                "voice": cfg.get("voice"),
+                "num_steps": cfg.get("num_steps"),
+                "t_schedule_mode": cfg.get("t_schedule_mode"),
+                "sway_coeff": cfg.get("sway_coeff"),
+                "chunking_enabled": cfg.get("chunking_enabled"),
+                "chunk_min_chars": cfg.get("chunk_min_chars"),
+                "first_sentence_chunk_min_chars": cfg.get("first_sentence_chunk_min_chars"),
+                "seed": cfg.get("seed"),
+                "ref_embed": cfg.get("ref_embed"),
+                "ref_wav": bool(cfg.get("ref_wav")),
+                "ref_wavs_count": len(cfg.get("ref_wavs") or []) if isinstance(cfg.get("ref_wavs"), list) else 0,
+                "max_ref_seconds": cfg.get("max_ref_seconds"),
+                "caption": cfg.get("caption"),
+                "server_log": server_log,
+                "rewrite_enabled": rewrite.get("enabled"),
+                "rewrite_provider": rewrite.get("provider"),
+                "rewrite_model": rewrite.get("model"),
+                "dictionary_enabled": dictionary_config().get("enabled"),
+                "dictionary_path": str(dictionary_path()),
+                "dictionary_entries": len(entries),
+            },
             "summary": summary, "recommendation": _recommendation(summary), "recent": recent, "latest_debug": _latest_debug(), "dictionary": {"path": str(dictionary_path()), "entries": entries}, "server_log": _tail_file(server_log)}
 
 
