@@ -6,11 +6,11 @@ import {Sparkline} from '@/components/dither-kit/sparkline';
 import {DitherGradient} from '@/components/dither-kit/gradient';
 import {Playground} from './Playground';
 
-type VoiceAsset = {id: string; label: string};
+type VoiceAsset = {id: string; label: string; type?: string};
 type ValidationResult = {warnings?: string[]; errors?: string[]};
 
 type SettingGroup = {title: string; keys: string[]};
-const basicGroups: SettingGroup[] = [{title: 'Generation basics', keys: ['caption', 'ref_wav', 'ref_embed', 'seed']}];
+const basicGroups: SettingGroup[] = [{title: 'Generation basics', keys: ['caption', 'ref_wav', 'ref_wavs', 'ref_embed', 'max_ref_seconds', 'seed']}];
 const advancedGroups: SettingGroup[] = [
   {title: 'Quality and speed', keys: ['num_steps', 't_schedule_mode', 'sway_coeff', 'cfg_scale_text', 'cfg_scale_caption', 'cfg_scale_speaker']},
   {title: 'Long-form processing', keys: ['chunking_enabled', 'chunk_min_chars', 'first_sentence_chunk_min_chars']},
@@ -46,6 +46,42 @@ function FieldControl({
         onChange={(event) => onChange(event.target.checked)}
         aria-label={meta.label}
       />
+    );
+  }
+
+  if (meta.type === 'voice_assets') {
+    const selected = Array.isArray(value) ? value.map(String) : [];
+    const audioTypes: Record<string, true> = {wav: true, flac: true, mp3: true, ogg: true, opus: true};
+    const audioAssets = assets.filter((asset) => {
+      const type = asset.type?.toLowerCase() ?? asset.id.split('.').pop()?.toLowerCase();
+      return type ? audioTypes[type] === true : false;
+    });
+    return (
+      <div className="reference-assets-control">
+        <Select
+          multiple
+          size={Math.max(3, Math.min(6, audioAssets.length || 3))}
+          value={selected}
+          onChange={(event) => onChange(Array.from(event.target.selectedOptions, (option) => option.value))}
+          aria-label={meta.label}
+        >
+          {audioAssets.map((asset) => (
+            <option key={asset.id} value={asset.id}>
+              {asset.label}
+            </option>
+          ))}
+        </Select>
+        <input
+          className="ui-input"
+          type="file"
+          accept=".wav,.flac,.mp3,.ogg,.opus"
+          aria-label={`${meta.label ?? '参照音声'}を追加`}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void onFile(file);
+          }}
+        />
+      </div>
     );
   }
 
@@ -181,12 +217,36 @@ export function Workspace({config: initial, activity}: {config: ConfigPayload | 
 
   if (!saved) return <div className="workspace-loading">Loading configuration</div>;
   const schema = saved.schema?.fields ?? {};
-  const updateValue = (key: string, value: unknown) => { setDraft((current) => withConfigValue(current, key, value)); setWarnings([]); setErrors([]); };
+  const updateValue = (key: string, value: unknown) => {
+    setDraft((current) => {
+      const next = withConfigValue(current, key, value);
+      if (key === 'ref_wavs' && Array.isArray(value) && value.length > 0) {
+        next.ref_wav = null;
+        next.ref_embed = null;
+      } else if (key === 'ref_wav' && value) {
+        next.ref_wavs = [];
+        next.ref_embed = null;
+      } else if (key === 'ref_embed' && value) {
+        next.ref_wavs = [];
+        next.ref_wav = null;
+      }
+      return next;
+    });
+    setWarnings([]);
+    setErrors([]);
+  };
   const importReferenceAudio = async (key: string, file: File) => {
     setStatus('Importing reference audio'); setWarnings([]); setErrors([]);
     try {
       const result = await api.importReferenceAudio(file);
-      updateValue(key, result.data.asset.id);
+      const importedId = result.data.asset.id;
+      if (key === 'ref_wavs') {
+        const current = configValue(draft, key);
+        const selected = Array.isArray(current) ? current.map(String) : [];
+        updateValue(key, [...new Set([...selected, importedId])]);
+      } else {
+        updateValue(key, importedId);
+      }
       setStatus('Imported · save the revision to apply');
     } catch (error) {
       setErrors([error instanceof Error ? error.message : 'Unable to import reference audio']);

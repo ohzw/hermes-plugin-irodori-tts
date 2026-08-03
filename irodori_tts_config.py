@@ -128,6 +128,9 @@ def safe_config_view(provider_name: str = "irodori-local") -> dict:
             _item("voice_compatible", "Voice compatible", provider.get("voice_compatible")),
             _item("max_text_length", "Maximum text length", provider.get("max_text_length")),
             _item("caption", "Voice caption", provider.get("caption"), help_text="Description passed to the voice model."),
+            _item("ref_wav", "Reference audio", bool(provider.get("ref_wav"))),
+            _item("ref_wavs_count", "Long-reference clips", len(provider.get("ref_wavs") or []) if isinstance(provider.get("ref_wavs"), list) else 0),
+            _item("max_ref_seconds", "Reference limit (s)", provider.get("max_ref_seconds")),
         ]),
         _group("rewrite", "Rewrite", [
             _item("enabled", "Enabled", rewrite.get("enabled")),

@@ -527,7 +527,9 @@ def build_speech_payload(
     optional_map = {
         "caption": cfg.get("caption"),
         "ref_wav": cfg.get("ref_wav"),
+        "ref_wavs": cfg.get("ref_wavs"),
         "ref_embed": cfg.get("ref_embed"),
+        "max_ref_seconds": _optional_float(cfg.get("max_ref_seconds")),
         "num_steps": _optional_int(cfg.get("num_steps")),
         "t_schedule_mode": cfg.get("t_schedule_mode"),
         "sway_coeff": _optional_float(cfg.get("sway_coeff")),
@@ -539,8 +541,14 @@ def build_speech_payload(
         "max_caption_len": _optional_int(cfg.get("max_caption_len")),
         "seed": _optional_int(cfg.get("seed")),
     }
+    if isinstance(optional_map["ref_wavs"], list) and optional_map["ref_wavs"]:
+        # The v4 server rejects mixed singular/plural reference inputs. Prefer
+        # the explicit long-reference setting when both are present in legacy
+        # config rather than sending an invalid request.
+        optional_map["ref_wav"] = None
+        optional_map["ref_embed"] = None
     for key, value in optional_map.items():
-        if value not in (None, ""):
+        if value not in (None, "", []):
             irodori[key] = value
     return {
         "model": model_value,

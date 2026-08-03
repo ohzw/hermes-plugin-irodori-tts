@@ -14,15 +14,17 @@ from typing import Any, Iterator
 
 import irodori_tts_config as _config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _PROVIDER_PATH = ("tts", "providers", "irodori-local")
 
 # This is the only client-editable surface.  Metadata is deliberately plain data
 # so the future API/UI can serialize it without importing implementation details.
 FIELD_SCHEMA = {
     "caption": {"path": "caption", "label": "声のキャプション", "description": "Irodori が目指す声の性質。", "type": "string", "max_length": 500, "apply": "next_request"},
-    "ref_wav": {"path": "ref_wav", "label": "参照音声", "description": "音声ファイルを選択します。", "type": "file", "apply": "next_request"},
+    "ref_wav": {"path": "ref_wav", "label": "参照音声", "description": "単一の参照音声を選択します。複数音声を使う場合は下の長時間参照音声を使用してください。", "type": "file", "apply": "next_request"},
+    "ref_wavs": {"path": "ref_wavs", "label": "長時間参照音声", "description": "同じ話者の短い音声を複数選択します。v4 は合計最大120秒まで対応します。", "type": "voice_assets", "default": [], "apply": "next_request"},
     "ref_embed": {"path": "ref_embed", "label": "話者埋め込み", "description": "登録済み voice asset から声質を選択します。", "type": "voice_asset", "apply": "next_request"},
+    "max_ref_seconds": {"path": "max_ref_seconds", "label": "参照音声の上限秒数", "description": "参照音声の結合上限。空欄なら v4 のチェックポイント既定値（120秒）を使用します。", "type": "number", "minimum": 1.0, "maximum": 120.0, "apply": "next_request"},
     "seed": {"path": "seed", "label": "再現性", "description": "同じ条件で再現しやすくする固定値。", "type": "integer", "minimum": 0, "maximum": 2147483647, "apply": "next_request"},
     "num_steps": {"path": "num_steps", "label": "生成ステップ数", "description": "増やすと品質が上がる場合がありますが、生成時間も増えます。", "type": "integer", "minimum": 1, "maximum": 100, "apply": "next_request"},
     "t_schedule_mode": {"path": "t_schedule_mode", "label": "スケジュール方式", "description": "サンプリング時間の配分方式。", "type": "string", "max_length": 32, "enum": ["sway", "linear"], "apply": "next_request"},
@@ -144,7 +146,9 @@ def read_values(root: dict[str, Any]) -> dict[str, Any]:
         values[key] = meta.get("default") if value is None and "default" in meta else value
     for key in ("ref_wav", "ref_embed"):
         values[key] = _voice_asset_id(values[key], provider, _config.hermes_home())
+    values["ref_wavs"] = _voice_asset_ids(values["ref_wavs"], provider, _config.hermes_home())
     return values
+
 
 
 def get_editable_values(root: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -211,6 +215,22 @@ def _voice_asset_path(value: Any, provider: dict[str, Any], home: Path) -> Any:
         if candidate.is_file() and candidate.is_relative_to(root):
             return str(candidate)
     return value
+
+
+def _valid_audio_asset(value: Any, provider: dict[str, Any], home: Path) -> bool:
+    return _valid_voice_asset(value, provider, home) and Path(str(value)).suffix.lower() in _AUDIO_EXTENSIONS
+
+
+def _voice_asset_ids(value: Any, provider: dict[str, Any], home: Path) -> Any:
+    if not isinstance(value, list):
+        return value
+    return [_voice_asset_id(item, provider, home) for item in value]
+
+
+def _voice_asset_paths(value: Any, provider: dict[str, Any], home: Path) -> Any:
+    if not isinstance(value, list):
+        return value
+    return [_voice_asset_path(item, provider, home) for item in value]
 
 
 def _configured_provider() -> dict[str, Any]:
@@ -330,6 +350,11 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
         elif kind == "voice_asset":
             if not _valid_voice_asset(value, provider, home):
                 _issue(result["errors"], key, "Reference voice must be an existing file under an Irodori voices directory.")
+        elif kind == "voice_assets":
+            if not isinstance(value, list):
+                _issue(result["errors"], key, "Expected a list of reference audio assets.")
+            elif any(not _valid_audio_asset(item, provider, home) for item in value):
+                _issue(result["errors"], key, "Every long-reference item must be an existing audio file under an Irodori voices directory.")
         elif kind == "file":
             if value != "" and (not _valid_voice_asset(value, provider, home) or Path(str(value)).suffix.lower() not in _AUDIO_EXTENSIONS):
                 _issue(result["errors"], key, "Reference audio must be an existing audio file under an Irodori voices directory.")
@@ -348,6 +373,13 @@ def validate_values(values: Any, *, provider: dict[str, Any] | None = None, home
                 _issue(result["errors"], key, "Value is outside the allowed range.")
         if "enum" in meta and value not in meta["enum"]:
             _issue(result["errors"], key, "Value is not an allowed option.")
+    active_reference_modes = {
+        key
+        for key in ("ref_wav", "ref_wavs", "ref_embed")
+        if values.get(key) not in (None, "", [])
+    }
+    if len(active_reference_modes) > 1:
+        _issue(result["errors"], "ref_wavs", "Choose one reference mode: single audio, long-reference audio, or speaker embedding.")
     target_chars = values.get("rewrite.summary.target_chars")
     max_chars = values.get("rewrite.summary.max_chars")
     if (
@@ -429,6 +461,8 @@ class ConfigStore:
                 stored_value = value
                 if key in {"ref_wav", "ref_embed"}:
                     stored_value = _voice_asset_path(value, provider, _config.hermes_home())
+                elif key == "ref_wavs":
+                    stored_value = _voice_asset_paths(value, provider, _config.hermes_home())
                 _set(provider, FIELD_SCHEMA[key]["path"], stored_value)
             had_original = self.path.exists()
             self.backup_dir.mkdir(parents=True, exist_ok=True)

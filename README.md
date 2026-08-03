@@ -32,7 +32,20 @@ uv sync --extra cpu
 cp .env.example .env
 ```
 
-Choose the backend and model configuration appropriate for your machine. Apple Silicon users should follow the current upstream instructions rather than copying CUDA options.
+Choose the backend and model configuration appropriate for your machine. Apple Silicon users should follow the current upstream instructions rather than copying CUDA options. The current upstream server targets **Irodori-TTS-v4-Small** by default; keep its `.env` checkpoint setting at `Aratako/Irodori-TTS-v4-Small` unless you intentionally use another checkpoint.
+For an existing checkout, update the server before restarting it:
+
+```bash
+cd ~/src/Irodori-TTS-Server
+git pull --ff-only
+uv sync --extra cpu
+```
+
+### Irodori-TTS-v4-Small
+
+This plugin targets the current v4 server contract. v4 uses a pretrained Japanese ModernBERT encoder and supports multiple reference clips with up to 120 seconds of combined reference audio. Use several clean, short clips from the same speaker for the long-reference mode; a single uninterrupted recording is supported by the server but is not the primary evaluated training format.
+
+The OpenAI-compatible request model remains `irodori-tts`; the checkpoint is selected by `Irodori-TTS-Server`, not by the plugin. The dashboard Workspace exposes both the single reference audio field and the v4 long-reference clip selector. Do not configure singular and plural reference fields together.
 
 ## Install this Hermes plugin
 
@@ -197,8 +210,7 @@ This license does not cover external software, model weights, codecs, reference 
 
 - [Irodori-TTS](https://github.com/Aratako/Irodori-TTS) — upstream code and license
 - [Irodori-TTS-Server](https://github.com/Aratako/Irodori-TTS-Server) — separately installed server code and license
-- [Irodori-TTS-500M-v3](https://huggingface.co/Aratako/Irodori-TTS-500M-v3) — model card, license declaration, and ethical restrictions
-- [Irodori-TTS-600M-v3-VoiceDesign](https://huggingface.co/Aratako/Irodori-TTS-600M-v3-VoiceDesign) — model card, license declaration, and ethical restrictions
+- [Irodori-TTS-v4-Small](https://huggingface.co/Aratako/Irodori-TTS-v4-Small) — model card, license declaration, and ethical restrictions
 - [Semantic-DACVAE-Japanese-32dim](https://huggingface.co/Aratako/Semantic-DACVAE-Japanese-32dim) — codec model card and license declaration
 
 If upstream code or other third-party material is copied into a future release, preserve its copyright and license notices as required by that material's license.
